@@ -1,24 +1,24 @@
-import { parseDatasourceTypes } from "./parse-datasource-types.ts";
+import { parseDatasourceTypes } from "./codegen/lib/parse-datasource-types.ts";
 import {
   generateInitialMigration,
   normalizeDialect,
   type SchemaData,
-} from "../../lib/generate-sql.ts";
+} from "./lib/generate-sql.ts";
 import {
   buildCustomMigrationFiles,
   generateFilesFromPairs,
   type CustomMigrationPair,
-} from "./generate-custom-migrations.ts";
-import { assertSkipMigrationsCovered } from "./validate-skip-migrations-coverage.ts";
-import { resolveSchemaDialects } from "./deterministic-project.ts";
-import { chainMigrationEntries } from "./migration-entries.ts";
-import { CONTENT } from "./generate-result.ts";
-import type { GenerateEntry } from "./generate-result.ts";
-import { datasourceSettingsForSettings } from "./ts-datasource-settings.ts";
+} from "./codegen/lib/generate-custom-migrations.ts";
+import { assertSkipMigrationsCovered } from "./codegen/lib/validate-skip-migrations-coverage.ts";
+import { resolveSchemaDialects } from "./codegen/lib/deterministic-project.ts";
+import { chainMigrationEntries } from "./codegen/lib/migration-entries.ts";
+import { CONTENT } from "./codegen/lib/generate-result.ts";
+import type { GenerateEntry } from "./codegen/lib/generate-result.ts";
+import { datasourceSettingsForSettings } from "./codegen/lib/ts-datasource-settings.ts";
 import {
   structuredSettingsFromDict,
   type SettingsDict,
-} from "./settings-dict.ts";
+} from "./codegen/lib/settings-dict.ts";
 
 interface CustomMigrationFile {
   filename: string;
