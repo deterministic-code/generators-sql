@@ -1,0 +1,35 @@
+{
+  "name": "@deterministic-code/generators-sql",
+  "version": "0.0.1",
+  "description": "SQL generator pack for the deterministic toolchain: DDL/migration/stored-procedure emit + the shared-scope sql & stored_procedures lanes.",
+  "type": "module",
+  "exports": {
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "import": "./dist/*.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "dependencies": {
+    "@deterministic-code/generator-sdk": "github:deterministic-code/generators-common",
+    "@deterministic-code/deterministic-specifications": "github:deterministic-code/deterministic-specifications",
+    "js-yaml": "^4.1.0",
+    "pluralize": "^8.0.0",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.10.0",
+    "@types/pluralize": "^0.0.33",
+    "typescript": "^5.8.0"
+  }
+}
