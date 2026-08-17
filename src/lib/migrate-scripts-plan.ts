@@ -1,4 +1,4 @@
-import { CONTAINER_SQL_ROOT } from "@deterministic-code/generator-sdk/codegen-layout";
+import { CONTAINER_SQL_ROOT } from "../codegen-layout.ts";
 import { DIALECT_DRIVER_PACKAGES, type SqlDialect } from "./generate-sql.ts";
 
 interface PatchSection {

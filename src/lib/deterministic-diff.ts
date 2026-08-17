@@ -1,4 +1,4 @@
-import type { JsonValue } from "@deterministic-code/generator-sdk/read-settings";
+import type { JsonValue } from "../read-settings.ts";
 
 /** JSON pointer paths use the inner key for keyed collections (single-key map arrays) rather than the array index, so they stay stable across re-orderings. This deviates from strict RFC 6901. */
 export type DiffOp =

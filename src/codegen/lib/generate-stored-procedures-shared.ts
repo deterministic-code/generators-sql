@@ -1,5 +1,5 @@
-import { parseDatasourceTypes } from "@deterministic-code/generator-sdk/codegen/lib/parse-datasource-types";
-import { datasourceSettingsForSettings } from "@deterministic-code/generator-sdk/codegen/lib/ts-datasource-settings";
+import { parseDatasourceTypes } from "./parse-datasource-types.ts";
+import { datasourceSettingsForSettings } from "./ts-datasource-settings.ts";
 import {
   buildLiveTables,
   normalizeDialect,
@@ -10,18 +10,18 @@ import {
   generateStoredProcedureSections,
   type SpOpts,
 } from "./generate-stored-procedures.ts";
-import { byFieldsFromDatasource } from "@deterministic-code/generator-sdk/lib/datasource-by-fields";
-import { resolveDatasourceDialects } from "@deterministic-code/generator-sdk/codegen/lib/deterministic-project";
+import { byFieldsFromDatasource } from "../../lib/datasource-by-fields.ts";
+import { resolveDatasourceDialects } from "./deterministic-project.ts";
 import { chainMigrationEntries } from "./migration-entries.ts";
 import {
   INITIAL_MIGRATION_SEQUENCE,
   migrationStem,
-} from "@deterministic-code/generator-sdk/lib/migration-sequence";
-import type { GenerateEntry } from "@deterministic-code/generator-sdk/codegen/lib/generate-result";
+} from "../../lib/migration-sequence.ts";
+import type { GenerateEntry } from "./generate-result.ts";
 import {
   structuredSettingsFromDict,
   type SettingsDict,
-} from "@deterministic-code/generator-sdk/codegen/lib/settings-dict";
+} from "./settings-dict.ts";
 
 interface BuildEntriesOptions {
   spOpts: SpOpts;

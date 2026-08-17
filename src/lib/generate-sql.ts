@@ -1,17 +1,17 @@
-import type { JsonValue } from "@deterministic-code/generator-sdk/read-settings";
+import type { JsonValue } from "../read-settings.ts";
 import { createHash } from "node:crypto";
-import { effectiveTableName } from "@deterministic-code/generator-sdk/lib/effective-table-name";
+import { effectiveTableName } from "./effective-table-name.ts";
 import {
   datasourceSettingsFor,
   type DatasourceOptions,
-} from "@deterministic-code/generator-sdk/codegen/lib/ts-datasource-settings";
-import { resolveReferenceParentType } from "@deterministic-code/generator-sdk/datasource-references";
-import { CONVERTER_MODULES } from "@deterministic-code/generator-sdk/lib/field-converter";
+} from "../codegen/lib/ts-datasource-settings.ts";
+import { resolveReferenceParentType } from "../datasource-references.ts";
+import { CONVERTER_MODULES } from "./field-converter.ts";
 import {
   nativeTypeFor,
   renderSqlDefault,
   sqlStringLiteral,
-} from "@deterministic-code/generator-sdk/lib/field-converters/base";
+} from "./field-converters/base.ts";
 
 export type SqlDialect =
   | "sqlite"
@@ -215,7 +215,7 @@ export function mapColumnType(dialect: string, field: FieldLike): string {
 export {
   MYSQL_VARCHAR_MAX_CHARS_UTF8MB4,
   MYSQL_VARBINARY_MAX_BYTES,
-} from "@deterministic-code/generator-sdk/lib/field-converters/mysql";
+} from "./field-converters/mysql.ts";
 
 function booleanLiteral(dialect: string, value: boolean): string {
   if (dialect === "postgres") return value ? "TRUE" : "FALSE";

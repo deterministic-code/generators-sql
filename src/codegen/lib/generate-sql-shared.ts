@@ -1,4 +1,4 @@
-import { parseDatasourceTypes } from "@deterministic-code/generator-sdk/codegen/lib/parse-datasource-types";
+import { parseDatasourceTypes } from "./parse-datasource-types.ts";
 import {
   generateInitialMigration,
   normalizeDialect,
@@ -10,15 +10,15 @@ import {
   type CustomMigrationPair,
 } from "./generate-custom-migrations.ts";
 import { assertSkipMigrationsCovered } from "./validate-skip-migrations-coverage.ts";
-import { resolveSchemaDialects } from "@deterministic-code/generator-sdk/codegen/lib/deterministic-project";
+import { resolveSchemaDialects } from "./deterministic-project.ts";
 import { chainMigrationEntries } from "./migration-entries.ts";
-import { CONTENT } from "@deterministic-code/generator-sdk/codegen/lib/generate-result";
-import type { GenerateEntry } from "@deterministic-code/generator-sdk/codegen/lib/generate-result";
-import { datasourceSettingsForSettings } from "@deterministic-code/generator-sdk/codegen/lib/ts-datasource-settings";
+import { CONTENT } from "./generate-result.ts";
+import type { GenerateEntry } from "./generate-result.ts";
+import { datasourceSettingsForSettings } from "./ts-datasource-settings.ts";
 import {
   structuredSettingsFromDict,
   type SettingsDict,
-} from "@deterministic-code/generator-sdk/codegen/lib/settings-dict";
+} from "./settings-dict.ts";
 
 interface CustomMigrationFile {
   filename: string;

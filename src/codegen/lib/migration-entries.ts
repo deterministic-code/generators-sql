@@ -1,5 +1,5 @@
-import { CONTENT } from "@deterministic-code/generator-sdk/codegen/lib/generate-result";
-import type { GenerateEntry } from "@deterministic-code/generator-sdk/codegen/lib/generate-result";
+import { CONTENT } from "./generate-result.ts";
+import type { GenerateEntry } from "./generate-result.ts";
 
 interface MigrationChain {
   up: { path: string; content: string };

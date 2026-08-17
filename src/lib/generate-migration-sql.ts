@@ -1,6 +1,6 @@
 import { diffValues } from "./deterministic-diff.ts";
-import { effectiveTableName } from "@deterministic-code/generator-sdk/lib/effective-table-name";
-import { topoSortEntities } from "@deterministic-code/generator-sdk/lib/entity-topo-sort";
+import { effectiveTableName } from "./effective-table-name.ts";
+import { topoSortEntities } from "./entity-topo-sort.ts";
 import {
   SQL_DIALECTS,
   buildTableNameMappings,
@@ -38,8 +38,8 @@ import type {
   NormalizedTable,
   NormalizedField,
 } from "./generate-sql.ts";
-import { loadFieldTypeCatalog } from "@deterministic-code/generator-sdk/lib/field-type-catalog";
-import { fieldConverterFor } from "@deterministic-code/generator-sdk/lib/field-converter";
+import { loadFieldTypeCatalog } from "./field-type-catalog.ts";
+import { fieldConverterFor } from "./field-converter.ts";
 
 type SeedRow = Record<string, SeedValue>;
 type RawIndexEntry = Record<string, RawIndexDef>;

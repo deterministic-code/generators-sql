@@ -1,4 +1,4 @@
-import { CUSTOM_TOKEN } from "@deterministic-code/generator-sdk/codegen/lib/migration-paths";
+import { CUSTOM_TOKEN } from "./migration-paths.ts";
 import { readCustomMigrationPairs } from "../../lib/custom-migrations-source.ts";
 
 export {

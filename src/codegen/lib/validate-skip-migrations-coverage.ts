@@ -10,7 +10,7 @@ import {
   type SchemaData,
   type SqlDialect,
 } from "../../lib/generate-sql.ts";
-import { effectiveTableName } from "@deterministic-code/generator-sdk/lib/effective-table-name";
+import { effectiveTableName } from "../../lib/effective-table-name.ts";
 
 interface SkipEntity {
   entityName: string;

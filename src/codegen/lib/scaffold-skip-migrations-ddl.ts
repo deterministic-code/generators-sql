@@ -17,7 +17,7 @@ import type {
   SchemaData,
   SqlDialect,
 } from "../../lib/generate-sql.ts";
-import { datasourceSettingsFor } from "@deterministic-code/generator-sdk/codegen/lib/ts-datasource-settings";
+import { datasourceSettingsFor } from "./ts-datasource-settings.ts";
 
 interface EntityStatementOptions {
   idType?: string;

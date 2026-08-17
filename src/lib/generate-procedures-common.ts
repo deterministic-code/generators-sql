@@ -1,5 +1,5 @@
 /** Dialect-agnostic helpers shared by the postgres/mysql/sqlserver stored-procedure generators. */
-import { datasourceSettingsFor } from "@deterministic-code/generator-sdk/codegen/lib/ts-datasource-settings";
+import { datasourceSettingsFor } from "../codegen/lib/ts-datasource-settings.ts";
 
 interface ProcField {
   name: string;
