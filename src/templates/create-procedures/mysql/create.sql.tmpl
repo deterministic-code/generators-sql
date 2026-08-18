@@ -1,0 +1,20 @@
+DROP PROCEDURE IF EXISTS create_{{entityName}};
+GO
+CREATE PROCEDURE create_{{entityName}}(
+{{{params}}}
+)
+BEGIN
+{{#generatedId}}
+  DECLARE new_id VARCHAR(36);
+  SET new_id = UUID();
+  INSERT INTO {{tableTok}} ({{cols}})
+  VALUES ({{vals}});
+  SELECT new_id AS {{pkName}};
+{{/generatedId}}
+{{^generatedId}}
+  INSERT INTO {{tableTok}} ({{cols}})
+  VALUES ({{vals}});
+  {{{selectAfterWrite}}}
+{{/generatedId}}
+END;
+GO

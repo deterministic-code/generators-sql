@@ -1,0 +1,6 @@
+CREATE OR ALTER PROCEDURE find_{{plural}}
+AS
+BEGIN
+  SELECT {{cols}} FROM {{tableTok}} ORDER BY {{pkName}};
+END;
+GO

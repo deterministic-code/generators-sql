@@ -1,27 +1,15 @@
-import { CONTENT } from "./generate-result.ts";
-import type { GenerateEntry } from "./generate-result.ts";
+import { content, type GenerateEntry } from "./generate-entry.ts";
 
-interface MigrationChain {
+type MigrationChain = {
   up: { path: string; content: string };
   down: { path: string; content: string };
-}
+};
 
-/** The up + down `content` entries for one dialect's initial-migration chain, each filed under `<dialect>/migrations/`. Shared by the console path and the shared datasource-objects generator so both build the pair one way. */
-export function chainMigrationEntries(
+/** Up + down `content` entries under `<dialect>/migrations/`. */
+export const chainMigrationEntries = (
   dialect: string,
-  chain: unknown,
-): GenerateEntry[] {
-  const c = chain as MigrationChain;
-  return [
-    {
-      kind: CONTENT,
-      filename: `${dialect}/migrations/${c.up.path}`,
-      contents: c.up.content,
-    },
-    {
-      kind: CONTENT,
-      filename: `${dialect}/migrations/${c.down.path}`,
-      contents: c.down.content,
-    },
-  ];
-}
+  chain: MigrationChain,
+): GenerateEntry[] => [
+  content(`${dialect}/migrations/${chain.up.path}`, chain.up.content),
+  content(`${dialect}/migrations/${chain.down.path}`, chain.down.content),
+];

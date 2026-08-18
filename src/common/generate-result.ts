@@ -1,9 +1,4 @@
-/** The whole-file entry kind every generator returns. */
-export const CONTENT = "content";
+/** @deprecated Prefer `generate-entry.ts` — kept as a thin re-export for older callers. */
+export { content, type GenerateEntry } from "./generate-entry.ts";
 
-/** A whole-file `content` entry — the union an generator's `entries` array holds. */
-export type GenerateEntry = {
-  kind: string;
-  filename: string;
-  contents: unknown;
-};
+export const CONTENT = "content";

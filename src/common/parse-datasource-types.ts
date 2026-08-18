@@ -1,55 +1,69 @@
 import { parse } from "yaml";
-import { materializeReferenceTypes } from "../datasource-references.ts";
-import { datasourceSettingsForSettings } from "./ts-datasource-settings.ts";
+import {
+  materializeReferenceTypes,
+  type DatasourceTypes,
+} from "./datasource-references.ts";
+import {
+  datasourceSettings,
+  type SettingsDict,
+} from "./datasource-settings.ts";
 
 type SeedRows = unknown[];
+type Named = Record<string, unknown>;
 
-/** Index a `datasource_seeds.yaml` doc's `seeds:` list to `table name → rows`. Each list item is a single-key `{ table: [ {idN: row}, … ] }` entry; a malformed or absent doc yields an empty index. */
-function seedRowsByTable(seedsYamlText: string): Map<string, SeedRows> {
-  const doc = parse(seedsYamlText) as { seeds?: unknown } | null;
-  const list = Array.isArray(doc?.seeds) ? doc.seeds : [];
+const isRecord = (value: unknown): value is Named =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+const namedEntry = (
+  value: unknown,
+): [string, unknown] | undefined => {
+  if (!isRecord(value)) return undefined;
+  const pair = Object.entries(value)[0];
+  return pair === undefined ? undefined : [pair[0], pair[1]];
+};
+
+/** Index `datasource_seeds.yaml` `seeds:` → table name → rows. */
+const seedRowsByTable = (seedsYamlText: string): Map<string, SeedRows> => {
+  const doc = parse(seedsYamlText);
+  const list = isRecord(doc) && Array.isArray(doc.seeds) ? doc.seeds : [];
   const byTable = new Map<string, SeedRows>();
   for (const entry of list) {
-    if (!entry || typeof entry !== "object") continue;
-    const pair = Object.entries(entry as Record<string, unknown>)[0];
-    if (!pair) continue;
-    const [name, rows] = pair;
-    if (Array.isArray(rows)) byTable.set(name, rows);
-  }
-  return byTable;
-}
-
-/** Attach each table's companion seed rows onto its parsed type def under `seeds`, so downstream generators that read `def.seeds` see the same shape they read when seeds still nested under the type. Mutates and returns `datasourceData`. */
-function hydrateSeeds<T>(
-  datasourceData: T,
-  seedsYamlText: string | null | undefined,
-): T {
-  if (!seedsYamlText) return datasourceData;
-  const byTable = seedRowsByTable(seedsYamlText);
-  if (byTable.size === 0) return datasourceData;
-  const types = (datasourceData as { types?: unknown })?.types;
-  if (!Array.isArray(types)) return datasourceData;
-  for (const entry of types) {
-    if (!entry || typeof entry !== "object") continue;
-    const pair = Object.entries(entry as Record<string, unknown>)[0];
-    if (!pair) continue;
-    const [name, def] = pair;
-    if (def && typeof def === "object" && byTable.has(name)) {
-      (def as Record<string, unknown>).seeds = byTable.get(name);
+    const pair = namedEntry(entry);
+    if (pair !== undefined && Array.isArray(pair[1])) {
+      byTable.set(pair[0], pair[1]);
     }
   }
-  return datasourceData;
-}
+  return byTable;
+};
 
-/** Parse datasource_types YAML text and materialize every type-less `references` field's inherited parent-PK type — the single parse+resolve boundary for the datasource contract, so every downstream generator that reads `field.type` sees a resolved type rather than `undefined`. Seed rows live in the companion `datasource_seeds.yaml`; pass its text to fold each table's `seeds` back onto the parsed type def. */
-export function parseDatasourceTypes(
+/** Fold companion seed rows onto each type def under `seeds`. */
+const hydrateSeeds = (
+  data: DatasourceTypes,
+  seedsYamlText: string | null | undefined,
+): DatasourceTypes => {
+  if (!seedsYamlText) return data;
+  const byTable = seedRowsByTable(seedsYamlText);
+  if (byTable.size === 0) return data;
+  for (const entry of data.types ?? []) {
+    const pair = namedEntry(entry);
+    if (pair === undefined || !isRecord(pair[1]) || !byTable.has(pair[0])) {
+      continue;
+    }
+    pair[1].seeds = byTable.get(pair[0]);
+  }
+  return data;
+};
+
+/** Parse datasource_types YAML, resolve type-less `references`, optionally hydrate seeds. */
+export const parseDatasourceTypes = (
   datasourceYamlText: string,
-  settings: unknown,
+  settings: SettingsDict,
   seedsYamlText?: string | null,
-) {
-  const idType = datasourceSettingsForSettings(
-    settings as Parameters<typeof datasourceSettingsForSettings>[0],
-  ).idType;
-  const data = materializeReferenceTypes(parse(datasourceYamlText), idType);
+): DatasourceTypes => {
+  const { idType } = datasourceSettings(settings);
+  const data = materializeReferenceTypes(
+    parse(datasourceYamlText) as DatasourceTypes,
+    idType,
+  );
   return hydrateSeeds(data, seedsYamlText);
-}
+};

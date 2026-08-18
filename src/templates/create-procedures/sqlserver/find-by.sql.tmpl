@@ -1,0 +1,6 @@
+CREATE OR ALTER PROCEDURE find_{{entityName}}_by_{{byField}} @{{byField}} {{fieldType}}
+AS
+BEGIN
+  SELECT {{cols}} FROM {{tableTok}} WHERE {{byField}} = @{{byField}};
+END;
+GO

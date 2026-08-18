@@ -1,0 +1,7 @@
+DROP PROCEDURE IF EXISTS find_{{entityName}};
+GO
+CREATE PROCEDURE find_{{entityName}}(IN {{pkName}} {{pkType}})
+BEGIN
+  SELECT {{aliasedCols}} FROM {{tableTok}} t WHERE t.{{pkName}} = {{pkName}};
+END;
+GO

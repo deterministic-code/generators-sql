@@ -1,0 +1,6 @@
+CREATE OR ALTER PROCEDURE find_{{entityName}} @{{pkName}} {{pkType}}
+AS
+BEGIN
+  SELECT {{cols}} FROM {{tableTok}} WHERE {{pkName}} = @{{pkName}};
+END;
+GO

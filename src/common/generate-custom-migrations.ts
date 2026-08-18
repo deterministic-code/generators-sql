@@ -1,17 +1,13 @@
-import { readCustomMigrationPairs } from "../custom-migrations-source.ts";
+import {
+  readCustomMigrationPairs,
+  type CustomMigrationPair,
+} from "./custom-migrations-source.ts";
+
+export type { CustomMigrationPair };
 
 const CUSTOM_TOKEN = "_custom_";
 
 type Direction = "up" | "down";
-
-export interface CustomMigrationPair {
-  order: number;
-  name: string;
-  up: string;
-  down: string;
-  upSourcePath?: string;
-  downSourcePath?: string;
-}
 
 interface CustomMigrationFile {
   filename: string;

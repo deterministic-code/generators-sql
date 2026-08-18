@@ -1,0 +1,11 @@
+DROP PROCEDURE IF EXISTS {{name}};
+GO
+CREATE PROCEDURE {{name}}(
+{{{params}}}
+)
+BEGIN
+  UPDATE {{tableTok}} t
+{{{updateBody}}}
+  SELECT ROW_COUNT() AS affected;
+END;
+GO

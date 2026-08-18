@@ -1,10 +1,16 @@
-import { sized, numericFamily, type ConverterModule } from "./base.ts";
+import {
+  sized,
+  numericFamily,
+  DialectConverter,
+  type Conversion,
+  type DefaultsTable,
+  type IdColumnSuffixes,
+  type TriggerTable,
+} from "./base.ts";
 
-/** SQLite field converter: datasource_type → SQLite column type + `DEFAULT` expression. */
-export default {
-  target: "sqlite",
-  targetKind: "dialect",
-  conversions: [
+class SqliteConverter extends DialectConverter {
+  readonly target = "sqlite";
+  readonly conversions: Conversion[] = [
     {
       type: "string",
       native: sized("TEXT", (n) => `VARCHAR(${n})`),
@@ -21,12 +27,33 @@ export default {
     { type: "binary", native: "BLOB" },
     { type: "uuid", native: "TEXT" },
     { type: "reference", native: "INTEGER" },
-  ],
-  defaults: {
+  ];
+  readonly defaults: DefaultsTable = {
     Boolean: (v) => (v ? "1" : "0"),
     Now: () => `(strftime('%Y-%m-%dT%H:%M:%f', 'now', 'localtime'))`,
     UtcNow: () => `(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`,
     NewId: () => null,
     Hex: (a) => `X'${a}'`,
-  },
-} satisfies ConverterModule;
+  };
+  readonly idColumn: IdColumnSuffixes = {
+    integer: "INTEGER PRIMARY KEY AUTOINCREMENT",
+    biginteger: "INTEGER PRIMARY KEY AUTOINCREMENT",
+    uuid: "TEXT PRIMARY KEY",
+    string: "VARCHAR(64) NOT NULL PRIMARY KEY",
+  };
+  readonly uuidColumn = "VARCHAR(36) NOT NULL UNIQUE";
+
+  updatedTrigger(table: TriggerTable): string {
+    const { t, trg } = this.triggerNames(table);
+    const pk = table.fields.find((f) => f.primaryKey);
+    const pkCol = this.quote(pk ? pk.name : "id");
+    return `CREATE TRIGGER ${trg}
+AFTER UPDATE ON ${t}
+FOR EACH ROW
+BEGIN
+  UPDATE ${t} SET ${this.quote("updated")} = ${this.defaults.UtcNow()} WHERE ${pkCol} = OLD.${pkCol};
+END;`;
+  }
+}
+
+export default new SqliteConverter();

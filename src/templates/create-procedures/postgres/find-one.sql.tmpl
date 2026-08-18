@@ -1,0 +1,2 @@
+CREATE OR REPLACE FUNCTION find_{{entityName}}({{pkName}} {{pkType}}) RETURNS SETOF {{tableTok}}
+LANGUAGE sql AS $$ SELECT {{aliasedCols}} FROM {{tableTok}} t WHERE t.{{pkName}} = find_{{entityName}}.{{pkName}}; $$;
