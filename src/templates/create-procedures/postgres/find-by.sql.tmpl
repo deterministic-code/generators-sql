@@ -1,0 +1,2 @@
+CREATE OR REPLACE FUNCTION find_{{entityName}}_by_{{byField}}({{byField}} {{fieldType}}) RETURNS SETOF {{tableTok}}
+LANGUAGE sql AS $$ SELECT {{aliasedCols}} FROM {{tableTok}} t WHERE t.{{byField}} = find_{{entityName}}_by_{{byField}}.{{byField}}; $$;

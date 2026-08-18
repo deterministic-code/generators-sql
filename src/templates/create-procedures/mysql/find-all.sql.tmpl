@@ -1,0 +1,7 @@
+DROP PROCEDURE IF EXISTS find_{{plural}};
+GO
+CREATE PROCEDURE find_{{plural}}()
+BEGIN
+  SELECT {{aliasedCols}} FROM {{tableTok}} t ORDER BY t.{{pkName}};
+END;
+GO

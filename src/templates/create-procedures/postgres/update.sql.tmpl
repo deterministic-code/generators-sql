@@ -1,0 +1,12 @@
+CREATE OR REPLACE FUNCTION {{name}}(
+{{{params}}}
+) RETURNS INT LANGUAGE plpgsql AS $$
+DECLARE
+  affected INT;
+BEGIN
+  UPDATE {{tableTok}} t
+{{{updateBody}}}
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected;
+END;
+$$;

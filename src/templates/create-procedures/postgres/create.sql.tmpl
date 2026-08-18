@@ -1,0 +1,12 @@
+CREATE OR REPLACE FUNCTION create_{{entityName}}(
+{{{params}}}
+) RETURNS {{pkType}} LANGUAGE plpgsql AS $$
+DECLARE
+  new_id {{pkType}};
+BEGIN
+  INSERT INTO {{tableTok}} ({{cols}})
+  VALUES ({{cols}})
+  RETURNING {{pkName}} INTO new_id;
+  RETURN new_id;
+END;
+$$;

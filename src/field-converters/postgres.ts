@@ -3,14 +3,17 @@ import {
   charLen,
   numericFamily,
   decimalPrecisionScale,
-  type ConverterModule,
+  DialectConverter,
+  type Conversion,
+  type DefaultsTable,
+  type IdColumnSuffixes,
+  type TriggerTable,
 } from "./base.ts";
 
-/** Postgres field converter: datasource_type → Postgres column type + `DEFAULT` expression. */
-export default {
-  target: "postgres",
-  targetKind: "dialect",
-  conversions: [
+class PostgresConverter extends DialectConverter {
+  readonly target = "postgres";
+  override readonly supportsProcedures = true;
+  readonly conversions: Conversion[] = [
     {
       type: "string",
       native: sized("TEXT", (n) => `VARCHAR(${n})`),
@@ -36,12 +39,43 @@ export default {
     { type: "binary", native: "BYTEA" },
     { type: "uuid", native: "UUID" },
     { type: "reference", native: "INTEGER" },
-  ],
-  defaults: {
+  ];
+  readonly defaults: DefaultsTable = {
     Boolean: (v) => (v ? "TRUE" : "FALSE"),
     Now: () => `LOCALTIMESTAMP`,
     UtcNow: () => `(NOW() AT TIME ZONE 'UTC')`,
     NewId: () => `gen_random_uuid()`,
     Hex: (a) => `'\\x${a}'`,
-  },
-} satisfies ConverterModule;
+  };
+  readonly idColumn: IdColumnSuffixes = {
+    integer: "SERIAL PRIMARY KEY",
+    biginteger: "BIGSERIAL PRIMARY KEY",
+    uuid: "UUID PRIMARY KEY DEFAULT gen_random_uuid()",
+    string: "VARCHAR(64) NOT NULL PRIMARY KEY",
+  };
+  readonly uuidColumn = "UUID NOT NULL UNIQUE DEFAULT gen_random_uuid()";
+
+  override migrationPreamble(): string[] {
+    return [
+      "-- Shared updated_at function",
+      `CREATE OR REPLACE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
+BEGIN
+  NEW."updated" = NOW() AT TIME ZONE 'UTC';
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;`,
+      "",
+    ];
+  }
+
+  updatedTrigger(table: TriggerTable): string {
+    const { t, trg } = this.triggerNames(table);
+    return `CREATE TRIGGER ${trg} BEFORE UPDATE ON ${t} FOR EACH ROW EXECUTE FUNCTION set_updated_at();`;
+  }
+
+  override seedAfter(table: string, quoted: string): string {
+    return `SELECT setval(pg_get_serial_sequence('${table}', 'id'), (SELECT MAX("id") FROM ${quoted}));`;
+  }
+}
+
+export default new PostgresConverter();

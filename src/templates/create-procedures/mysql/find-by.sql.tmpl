@@ -1,0 +1,7 @@
+DROP PROCEDURE IF EXISTS find_{{entityName}}_by_{{byField}};
+GO
+CREATE PROCEDURE find_{{entityName}}_by_{{byField}}(IN {{byField}} {{fieldType}})
+BEGIN
+  SELECT {{aliasedCols}} FROM {{tableTok}} t WHERE t.{{byField}} = {{byField}};
+END;
+GO

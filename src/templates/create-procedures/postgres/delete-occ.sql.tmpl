@@ -1,0 +1,12 @@
+CREATE OR REPLACE FUNCTION delete_{{entityName}}_optimistic_concurrency(
+{{{params}}}
+) RETURNS INT LANGUAGE plpgsql AS $$
+DECLARE
+  affected INT;
+BEGIN
+  DELETE FROM {{tableTok}} t
+  WHERE t.{{pkName}} = delete_{{entityName}}_optimistic_concurrency.{{pkName}} AND t.updated = delete_{{entityName}}_optimistic_concurrency.expected_updated;
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected;
+END;
+$$;

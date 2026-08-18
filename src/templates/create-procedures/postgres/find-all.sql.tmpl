@@ -1,0 +1,2 @@
+CREATE OR REPLACE FUNCTION find_{{plural}}() RETURNS SETOF {{tableTok}}
+LANGUAGE sql AS $$ SELECT {{aliasedCols}} FROM {{tableTok}} t ORDER BY t.{{pkName}}; $$;

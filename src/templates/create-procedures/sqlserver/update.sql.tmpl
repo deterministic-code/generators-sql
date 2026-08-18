@@ -1,0 +1,9 @@
+CREATE OR ALTER PROCEDURE {{name}}
+{{{params}}}
+AS
+BEGIN
+  UPDATE {{tableTok}}
+{{{updateBody}}}
+  SELECT @@ROWCOUNT AS affected;
+END;
+GO

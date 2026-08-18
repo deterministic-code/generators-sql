@@ -1,4 +1,56 @@
-import { parseDefaultToken, EMPTY_UUID } from "../default-token.ts";
+/** The all-zero uuid, used when a uuid field's default is the `Empty` token. */
+const EMPTY_UUID = "00000000-0000-0000-0000-000000000000";
+
+/** Field types whose `default_value` renders as a bare numeric literal (no quoting). */
+const NUMERIC_LITERAL_TYPES = new Set([
+  "number",
+  "integer",
+  "smallinteger",
+  "biginteger",
+  "float",
+  "decimal",
+  "reference",
+]);
+
+const DATETIME_LITERAL = /^DateTime\('(.*)'\)$/;
+const UUID_LITERAL = /^uuid\('(.*)'\)$/;
+const HEX_LITERAL = /^Hex\('(.*)'\)$/;
+
+interface DefaultToken {
+  token: string;
+  arg?: string | boolean;
+}
+
+/** Classify a field's `default_value` into `{ token, arg }` — Now/UtcNow/NewId/Empty/Hex, `DateTime('…')`, `uuid('…')`, numeric/boolean/string literals. */
+function parseDefaultToken(type: string, value: unknown): DefaultToken {
+  if (value === undefined || value === null) return { token: "None" };
+  const v = String(value);
+  if (type === "boolean") return { token: "Boolean", arg: Boolean(value) };
+  if (NUMERIC_LITERAL_TYPES.has(type)) return { token: "Numeric", arg: v };
+  if (type === "datetime") return datetimeToken(v);
+  if (type === "uuid") return uuidToken(v);
+  if (type === "binary") return hexToken(v);
+  return { token: "String", arg: v };
+}
+
+function datetimeToken(v: string): DefaultToken {
+  if (v === "Now") return { token: "Now" };
+  if (v === "UtcNow") return { token: "UtcNow" };
+  const m = DATETIME_LITERAL.exec(v);
+  return { token: "DateTime", arg: m ? m[1] : v };
+}
+
+function uuidToken(v: string): DefaultToken {
+  if (v === "NewId") return { token: "NewId" };
+  if (v === "Empty") return { token: "Empty" };
+  const m = UUID_LITERAL.exec(v);
+  return { token: "Uuid", arg: m ? m[1] : v };
+}
+
+function hexToken(v: string): DefaultToken {
+  const m = HEX_LITERAL.exec(v);
+  return { token: "Hex", arg: m ? m[1] : v };
+}
 
 /** The `size` a field carries: a scalar length, a `[precision, scale]` tuple, the `"unlimited"` sentinel, or absent. */
 export type FieldSize = number | number[] | "unlimited" | null;
@@ -29,15 +81,65 @@ type DefaultArg = string | boolean;
 type DefaultRenderer = (arg?: DefaultArg) => string | null;
 
 /** A converter module's per-token default renderers, keyed by token name. */
-type DefaultsTable = Record<string, DefaultRenderer>;
+export type DefaultsTable = Record<string, DefaultRenderer>;
 
-/** One per-dialect field-converter module: the dialect it targets plus its conversion + default-rendering tables. */
-export interface ConverterModule {
-  target: string;
-  targetKind: "dialect";
-  conversions: Conversion[];
-  defaults: DefaultsTable;
+/** Type suffix for the implicit `id` PK column, keyed by datasource `id_type`. */
+export interface IdColumnSuffixes {
+  integer: string;
+  biginteger: string;
+  uuid: string;
+  string: string;
 }
+
+/** Minimal table shape dialect converters need for updated-at triggers. */
+export interface TriggerTable {
+  name: string;
+  fields: { name: string; primaryKey: boolean }[];
+}
+
+/** Per-dialect converter: type mappings, defaults, quoting, DROP, triggers, seed wraps. */
+export abstract class DialectConverter {
+  abstract readonly target: string;
+  readonly targetKind = "dialect" as const;
+  abstract readonly conversions: Conversion[];
+  abstract readonly defaults: DefaultsTable;
+  abstract readonly idColumn: IdColumnSuffixes;
+  abstract readonly uuidColumn: string;
+  readonly quoteLeft: string = '"';
+  readonly quoteRight: string = '"';
+  readonly supportsProcedures: boolean = false;
+
+  quote(ident: string): string {
+    return `${this.quoteLeft}${ident}${this.quoteRight}`;
+  }
+
+  dropTable(quoted: string): string {
+    return `DROP TABLE IF EXISTS ${quoted};`;
+  }
+
+  abstract updatedTrigger(table: TriggerTable): string;
+
+  migrationPreamble(): string[] {
+    return [];
+  }
+
+  seedBefore(_quoted: string): string | null {
+    return null;
+  }
+
+  seedAfter(_table: string, _quoted: string): string | null {
+    return null;
+  }
+
+  protected triggerNames(table: TriggerTable): { t: string; trg: string } {
+    return {
+      t: this.quote(table.name),
+      trg: this.quote(`trg_${table.name}_updated_at`),
+    };
+  }
+}
+
+export type ConverterModule = DialectConverter;
 
 /** Single-quote a value as a SQL string literal, doubling embedded quotes. */
 export function sqlStringLiteral(

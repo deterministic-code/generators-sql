@@ -1,0 +1,7 @@
+CREATE OR ALTER PROCEDURE delete_{{entityName}} @{{pkName}} {{pkType}}
+AS
+BEGIN
+  DELETE FROM {{tableTok}} WHERE {{pkName}} = @{{pkName}};
+  SELECT @@ROWCOUNT AS affected;
+END;
+GO

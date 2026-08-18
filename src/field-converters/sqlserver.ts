@@ -3,14 +3,19 @@ import {
   charLen,
   numericFamily,
   requirePrecisionScale,
-  type ConverterModule,
+  DialectConverter,
+  type Conversion,
+  type DefaultsTable,
+  type IdColumnSuffixes,
+  type TriggerTable,
 } from "./base.ts";
 
-/** SQL Server field converter: datasource_type → SQL Server column type + `DEFAULT` expression. */
-export default {
-  target: "sqlserver",
-  targetKind: "dialect",
-  conversions: [
+class SqlServerConverter extends DialectConverter {
+  readonly target = "sqlserver";
+  override readonly quoteLeft = "[";
+  override readonly quoteRight = "]";
+  override readonly supportsProcedures = true;
+  readonly conversions: Conversion[] = [
     {
       type: "string",
       native: sized("NVARCHAR(MAX)", (n) => `NVARCHAR(${n})`),
@@ -39,12 +44,42 @@ export default {
     },
     { type: "uuid", native: "UNIQUEIDENTIFIER" },
     { type: "reference", native: "INT" },
-  ],
-  defaults: {
+  ];
+  readonly defaults: DefaultsTable = {
     Boolean: (v) => (v ? "1" : "0"),
     Now: () => `GETDATE()`,
     UtcNow: () => `GETUTCDATE()`,
     NewId: () => `NEWID()`,
     Hex: (a) => `0x${a}`,
-  },
-} satisfies ConverterModule;
+  };
+  readonly idColumn: IdColumnSuffixes = {
+    integer: "INT IDENTITY(1,1) PRIMARY KEY",
+    biginteger: "BIGINT IDENTITY(1,1) PRIMARY KEY",
+    uuid: "UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID()",
+    string: "NVARCHAR(64) NOT NULL PRIMARY KEY",
+  };
+  readonly uuidColumn =
+    "UNIQUEIDENTIFIER NOT NULL UNIQUE DEFAULT NEWID()";
+
+  updatedTrigger(table: TriggerTable): string {
+    const { t, trg } = this.triggerNames(table);
+    const id = this.quote("id");
+    return `CREATE TRIGGER ${trg} ON ${t}
+AFTER UPDATE AS
+BEGIN
+  SET NOCOUNT ON;
+  UPDATE ${t} SET ${this.quote("updated")} = ${this.defaults.UtcNow()}
+  FROM ${t} t INNER JOIN inserted i ON t.${id} = i.${id};
+END;`;
+  }
+
+  override seedBefore(quoted: string): string {
+    return `SET IDENTITY_INSERT ${quoted} ON;`;
+  }
+
+  override seedAfter(_table: string, quoted: string): string {
+    return `SET IDENTITY_INSERT ${quoted} OFF;`;
+  }
+}
+
+export default new SqlServerConverter();

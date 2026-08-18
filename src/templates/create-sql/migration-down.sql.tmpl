@@ -1,0 +1,6 @@
+-- Rollback initial migration for {{dialect}}
+
+-- DROP tables (reverse dependency order)
+{{#dropStatements}}
+{{{.}}}
+{{/dropStatements}}

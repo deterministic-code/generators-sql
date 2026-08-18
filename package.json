@@ -1,12 +1,20 @@
 {
   "name": "@deterministic-code/generators-sql",
   "version": "0.0.1",
-  "description": "SQL generator pack for the deterministic toolchain: DDL/migration/stored-procedure emit + the shared-scope sql & stored_procedures lanes.",
+  "description": "SQL generator pack for the deterministic toolchain: per-dialect DDL/migration/stored-procedure emit.",
   "type": "module",
   "exports": {
+    "./generate-context": {
+      "types": "./dist/common/generate-context.d.ts",
+      "import": "./dist/common/generate-context.js"
+    },
     "./*": {
       "types": "./dist/*.d.ts",
       "import": "./dist/*.js"
+    },
+    "./*/*": {
+      "types": "./dist/*/*.d.ts",
+      "import": "./dist/*/*.js"
     },
     "./package.json": "./package.json"
   },
@@ -15,15 +23,17 @@
     "src"
   ],
   "scripts": {
-    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && cp -R src/templates dist/",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.build.json --noEmit"
   },
   "dependencies": {
+    "mustache": "^4.2.0",
     "pluralize": "^8.0.0",
     "yaml": "^2.6.0"
   },
   "devDependencies": {
+    "@types/mustache": "^4.2.6",
     "@types/node": "^22.10.0",
     "@types/pluralize": "^0.0.33",
     "typescript": "^5.8.0"
