@@ -28,6 +28,20 @@ export const normalizeDialect = (
     : null;
 };
 
+/** Dialects listed in `datasource.dialects`, or every supported dialect. */
+export const dialectsFromSettings = (
+  settings: Record<string, string>,
+): SqlDialect[] => {
+  const raw = settings["datasource.dialects"];
+  if (raw === undefined || raw === "") return [...SQL_DIALECTS];
+  const out: SqlDialect[] = [];
+  for (const item of raw.split(",")) {
+    const key = normalizeDialect(item.trim());
+    if (key !== null && !out.includes(key)) out.push(key);
+  }
+  return out.length > 0 ? out : [...SQL_DIALECTS];
+};
+
 export const requireDialect = (language: string): SqlDialect => {
   const key = normalizeDialect(language);
   if (!key) {
