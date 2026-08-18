@@ -1,27 +1,27 @@
-import { parseDatasourceTypes } from "./codegen/lib/parse-datasource-types.ts";
-import { datasourceSettingsForSettings } from "./codegen/lib/ts-datasource-settings.ts";
+import { parseDatasourceTypes } from "./common/parse-datasource-types.ts";
+import { datasourceSettingsForSettings } from "./common/ts-datasource-settings.ts";
 import {
   buildLiveTables,
   normalizeDialect,
   supportsProcedures,
   type SchemaData,
-} from "./lib/generate-sql.ts";
+} from "./sql.ts";
 import {
   generateStoredProcedureSections,
   type SpOpts,
-} from "./codegen/lib/generate-stored-procedures.ts";
-import { byFieldsFromDatasource } from "./lib/datasource-by-fields.ts";
-import { resolveDatasourceDialects } from "./codegen/lib/deterministic-project.ts";
-import { chainMigrationEntries } from "./codegen/lib/migration-entries.ts";
+} from "./common/generate-stored-procedures.ts";
+import { byFieldsFromDatasource } from "./datasource-by-fields.ts";
+import { resolveDatasourceDialects } from "./common/deterministic-project.ts";
+import { chainMigrationEntries } from "./common/migration-entries.ts";
 import {
   INITIAL_MIGRATION_SEQUENCE,
   migrationStem,
-} from "./lib/migration-sequence.ts";
-import type { GenerateEntry } from "./codegen/lib/generate-result.ts";
+} from "./migration-sequence.ts";
+import type { GenerateEntry } from "./common/generate-result.ts";
 import {
   structuredSettingsFromDict,
   type SettingsDict,
-} from "./codegen/lib/settings-dict.ts";
+} from "./common/settings-dict.ts";
 
 interface BuildEntriesOptions {
   spOpts: SpOpts;
