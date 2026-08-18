@@ -5,8 +5,16 @@
   "type": "module",
   "exports": {
     "./generate-context": {
-      "types": "./dist/common/generate-context.d.ts",
-      "import": "./dist/common/generate-context.js"
+      "types": "./dist/generate-context.d.ts",
+      "import": "./dist/generate-context.js"
+    },
+    "./generate-sql": {
+      "types": "./dist/generate-sql.d.ts",
+      "import": "./dist/generate-sql.js"
+    },
+    "./generate-stored-procedures": {
+      "types": "./dist/generate-stored-procedures.d.ts",
+      "import": "./dist/generate-stored-procedures.js"
     },
     "./*": {
       "types": "./dist/*.d.ts",
