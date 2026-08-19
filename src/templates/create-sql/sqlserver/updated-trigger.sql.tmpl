@@ -1,0 +1,7 @@
+CREATE TRIGGER {{quotedTrigger}} ON {{quotedTable}}
+AFTER UPDATE AS
+BEGIN
+  SET NOCOUNT ON;
+  UPDATE {{quotedTable}} SET {{quotedUpdated}} = {{{utcNow}}}
+  FROM {{quotedTable}} t INNER JOIN inserted i ON t.{{quotedId}} = i.{{quotedId}};
+END;

@@ -1,0 +1,1 @@
+{{#integer}}{{quotedName}} INT IDENTITY(1,1) PRIMARY KEY{{/integer}}{{#biginteger}}{{quotedName}} BIGINT IDENTITY(1,1) PRIMARY KEY{{/biginteger}}{{#uuid}}{{quotedName}} UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(){{/uuid}}{{#string}}{{quotedName}} NVARCHAR(64) NOT NULL PRIMARY KEY{{/string}}

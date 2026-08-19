@@ -1,11 +1,14 @@
+import type { NativeInfo } from "@deterministic-code/generators-common/base-type-converter";
 import {
-  CONVERTER_MODULES,
-  converterFor,
-} from "../field-converters/index.ts";
-import {
-  nativeTypeFor,
+  renderDefault,
   type ConverterField,
-} from "../field-converters/base.ts";
+  type SqlConversion,
+} from "../base-type-converter.ts";
+import * as mysql from "../mysql/base-type-converter.ts";
+import * as oracle from "../oracle/base-type-converter.ts";
+import * as postgres from "../postgres/base-type-converter.ts";
+import * as sqlite from "../sqlite/base-type-converter.ts";
+import * as sqlserver from "../sqlserver/base-type-converter.ts";
 
 export const SQL_DIALECTS = [
   "sqlite",
@@ -16,7 +19,30 @@ export const SQL_DIALECTS = [
 ] as const;
 
 export type SqlDialect = (typeof SQL_DIALECTS)[number];
-export const DEFAULT_SQL_DIALECT: SqlDialect = "sqlite";
+
+export type DialectTypeConverter = {
+  sqlConversion: SqlConversion;
+  conversions: Record<string, NativeInfo>;
+  toNative: (specType: string) => string;
+  toColumnType: (field: ConverterField) => string;
+};
+
+const DIALECTS: Record<SqlDialect, DialectTypeConverter> = {
+  sqlite,
+  mysql,
+  postgres,
+  sqlserver,
+  oracle,
+};
+
+export const dialectConverter = (dialect: string): DialectTypeConverter => {
+  const key = normalizeDialect(dialect) ?? dialect;
+  const pack = DIALECTS[key as SqlDialect];
+  if (pack === undefined) {
+    throw new Error(`Unknown dialect "${dialect}"`);
+  }
+  return pack;
+};
 
 export const normalizeDialect = (
   raw: string | null | undefined,
@@ -52,16 +78,35 @@ export const requireDialect = (language: string): SqlDialect => {
   return key;
 };
 
-export const q = (dialect: string, ident: string): string =>
-  (CONVERTER_MODULES[dialect] ?? CONVERTER_MODULES.sqlite).quote(ident);
+export const q = (dialect: string, ident: string): string => {
+  const { quoteLeft, quoteRight } = dialectConverter(dialect).sqlConversion;
+  return `${quoteLeft}${ident}${quoteRight}`;
+};
 
 /** sqlite/oracle have no stored procedures — SP generators skip them. */
-export const supportsProcedures = (dialect: string): boolean => {
-  const key = normalizeDialect(dialect) ?? dialect;
-  return CONVERTER_MODULES[key]?.supportsProcedures === true;
-};
+export const supportsProcedures = (dialect: string): boolean =>
+  dialectConverter(dialect).sqlConversion.supportsProcedures;
 
 export const mapColumnType = (
   dialect: string,
   field: ConverterField,
-): string => nativeTypeFor(converterFor(dialect), field);
+): string => {
+  const pack = dialectConverter(dialect);
+  if (field.type === "reference" && field.referencesType !== undefined) {
+    return mapColumnType(dialect, {
+      type: field.referencesType,
+      size: field.referencesSize,
+    });
+  }
+  return pack.toColumnType(field);
+};
+
+export const sqlDefault = (
+  dialect: string,
+  field: ConverterField,
+): string | null =>
+  renderDefault(
+    dialectConverter(dialect).conversions,
+    field.type,
+    field.defaultValue,
+  );

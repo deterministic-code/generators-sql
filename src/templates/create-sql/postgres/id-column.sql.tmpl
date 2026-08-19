@@ -1,0 +1,1 @@
+{{#integer}}{{quotedName}} SERIAL PRIMARY KEY{{/integer}}{{#biginteger}}{{quotedName}} BIGSERIAL PRIMARY KEY{{/biginteger}}{{#uuid}}{{quotedName}} UUID PRIMARY KEY DEFAULT gen_random_uuid(){{/uuid}}{{#string}}{{quotedName}} VARCHAR(64) NOT NULL PRIMARY KEY{{/string}}
