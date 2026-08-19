@@ -18,46 +18,65 @@ import {
   type SqlFile,
 } from "./sql-schema.ts";
 import {
+  dialectConverter,
   mapColumnType,
   q,
   requireDialect,
+  sqlDefault,
   type SqlDialect,
 } from "./sql-dialect.ts";
 import { buildCustomMigrationFiles } from "./generate-custom-migrations.ts";
 import { assertSkipMigrationsCovered } from "./validate-skip-migrations-coverage.ts";
-import { converterFor } from "../field-converters/index.ts";
-import {
-  renderSqlDefault,
-  type IdColumnSuffixes,
-} from "../field-converters/base.ts";
 import { seedSections } from "./seed-generator.ts";
 import {
+  columnTmpl,
   createIndexTmpl,
   createTableTmpl,
+  dialectSql,
+  foreignKeyTmpl,
   migrationDownTmpl,
   migrationUpTmpl,
 } from "../resources/sql.ts";
+import {
+  renderDropTable,
+  renderPreamble,
+  renderUpdatedTrigger,
+} from "./render-ddl.ts";
 
 const finalizeSql = (text: string): string => {
   const out = text.replace(/\n{3,}/g, "\n\n");
   return out.endsWith("\n") ? out : `${out}\n`;
 };
 
-const col = (dialect: SqlDialect, name: string, type: string, rest = ""): string =>
-  `${q(dialect, name)} ${type}${rest}`;
+type ColumnTokens = {
+  quotedName: string;
+  nativeType: string;
+  notNull?: boolean;
+  isUnique?: boolean;
+  primaryKey?: boolean;
+  hasDefault?: boolean;
+  defaultExpr?: string;
+};
+
+const columnLine = (tokens: ColumnTokens): string =>
+  fill(columnTmpl, tokens).trimEnd();
 
 const columnDef = (dialect: SqlDialect, field: NormalizedField): string => {
-  const parts = [col(dialect, field.name, mapColumnType(dialect, field))];
-  if (!field.isNullable) parts.push("NOT NULL");
-  if (field.isUnique) parts.push("UNIQUE");
-  if (field.primaryKey) parts.push("PRIMARY KEY");
-  const def = renderSqlDefault(converterFor(dialect), field);
-  if (def !== null) parts.push(`DEFAULT ${def}`);
-  else if (field.name === "uuid") {
-    const uuidDef = converterFor(dialect).defaults.NewId();
-    if (uuidDef !== null) parts.push(`DEFAULT ${uuidDef}`);
+  let defaultExpr = sqlDefault(dialect, field);
+  if (defaultExpr === null && field.name === "uuid") {
+    defaultExpr =
+      dialectConverter(dialect).conversions.uuid.defaults.NewId("") ?? null;
   }
-  return parts.join(" ");
+  if (defaultExpr === "") defaultExpr = null;
+  return columnLine({
+    quotedName: q(dialect, field.name),
+    nativeType: mapColumnType(dialect, field),
+    notNull: !field.isNullable,
+    isUnique: field.isUnique === true,
+    primaryKey: field.primaryKey === true,
+    hasDefault: defaultExpr !== null,
+    defaultExpr: defaultExpr ?? undefined,
+  });
 };
 
 const foreignKey = (
@@ -69,7 +88,11 @@ const foreignKey = (
   const [refTable, refCol] = String(field.references).split(".");
   const ref =
     mappings?.get(refTable) ?? effectiveTableName(refTable, pluralize);
-  return `FOREIGN KEY (${q(dialect, field.name)}) REFERENCES ${q(dialect, ref)}(${q(dialect, refCol)})`;
+  return fill(foreignKeyTmpl, {
+    quotedName: q(dialect, field.name),
+    quotedRefTable: q(dialect, ref),
+    quotedRefCol: q(dialect, refCol),
+  }).trimEnd();
 };
 
 const tableColumnLines = (
@@ -90,12 +113,22 @@ const tableColumnLines = (
 
   const lines: string[] = [];
   if (!table.fields.some((f) => f.primaryKey)) {
-    const suffix =
-      converterFor(dialect).idColumn[settings.idType as keyof IdColumnSuffixes];
-    if (suffix !== undefined) lines.push(col(dialect, "id", suffix));
+    const idType = settings.idType;
+    const idLine = fill(dialectSql[dialect].idColumn, {
+      quotedName: q(dialect, "id"),
+      integer: idType === "integer",
+      biginteger: idType === "biginteger",
+      uuid: idType === "uuid",
+      string: idType === "string",
+    }).trimEnd();
+    if (idLine.length > 0) lines.push(idLine);
   }
   if (withUuid) {
-    lines.push(col(dialect, "uuid", converterFor(dialect).uuidColumn));
+    lines.push(
+      fill(dialectSql[dialect].uuidColumn, {
+        quotedName: q(dialect, "uuid"),
+      }).trimEnd(),
+    );
   }
   const fks: string[] = [];
   for (const f of table.fields) {
@@ -105,13 +138,16 @@ const tableColumnLines = (
     }
   }
   if (withAudit) {
+    const utcNow =
+      dialectConverter(dialect).conversions.datetime.defaults.UtcNow("");
     const ts = (name: string) =>
-      col(
-        dialect,
-        name,
-        mapColumnType(dialect, { type: "datetime" }),
-        ` NOT NULL DEFAULT ${converterFor(dialect).defaults.UtcNow()}`,
-      );
+      columnLine({
+        quotedName: q(dialect, name),
+        nativeType: mapColumnType(dialect, { type: "datetime" }),
+        notNull: true,
+        hasDefault: utcNow !== null,
+        defaultExpr: utcNow ?? undefined,
+      });
     lines.push(ts("created"), ts("updated"));
   }
   return [...lines, ...fks];
@@ -156,12 +192,12 @@ const flattenTable = (
     createTable: createTableSql(dialect, table, opts),
     indexesBlock: indexes.join("\n"),
     trigger: tableHasAuditColumns(table)
-      ? converterFor(dialect).updatedTrigger(table)
+      ? renderUpdatedTrigger(dialect, table)
       : "",
   };
 };
 
-export const generateInitialMigration = (
+const generateInitialMigration = (
   language: string,
   data: SchemaData,
   opts: GenerateTableOptions = {},
@@ -178,7 +214,7 @@ export const generateInitialMigration = (
     withUuidColumn,
     tableNameMappings: buildTableNameMappings(data),
   };
-  const preamble = converterFor(dialect).migrationPreamble().join("\n");
+  const preamble = renderPreamble(dialect);
   const seeds = seedSections(dialect, live, {
     idType: settings.idType,
     withUuidColumn,
@@ -204,7 +240,7 @@ export const generateInitialMigration = (
           dialect,
           dropStatements: [...live]
             .reverse()
-            .map((t) => converterFor(dialect).dropTable(q(dialect, t.name))),
+            .map((t) => renderDropTable(dialect, t.name)),
         }),
       ),
     },

@@ -1,0 +1,6 @@
+CREATE TRIGGER {{quotedTrigger}}
+AFTER UPDATE ON {{quotedTable}}
+FOR EACH ROW
+BEGIN
+  UPDATE {{quotedTable}} SET {{quotedUpdated}} = {{{utcNow}}} WHERE {{quotedPk}} = OLD.{{quotedPk}};
+END;

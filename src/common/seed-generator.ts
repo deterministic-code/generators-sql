@@ -1,11 +1,7 @@
 import { createHash } from "node:crypto";
-import { converterFor } from "../field-converters/index.ts";
-import {
-  renderSqlDefault,
-  sqlStringLiteral,
-} from "../field-converters/base.ts";
+import { sqlStringLiteral } from "../base-type-converter.ts";
 import { fill } from "@deterministic-code/generators-common/fill";
-import { q, type SqlDialect } from "./sql-dialect.ts";
+import { dialectConverter, q, sqlDefault, type SqlDialect } from "./sql-dialect.ts";
 import {
   datasourceSettingsFor,
   tableHasAuditColumns,
@@ -14,7 +10,10 @@ import {
   type NormalizedTable,
   type SeedValue,
 } from "./sql-schema.ts";
-import { insertSeedTmpl } from "../resources/sql.ts";
+import {
+  insertSeedTmpl,
+} from "../resources/sql.ts";
+import { renderSeedAfter, renderSeedBefore } from "./render-ddl.ts";
 
 type SeedCell = {
   row: Record<string, unknown>;
@@ -33,7 +32,9 @@ const SEED_VALUE: Record<
   (dialect: SqlDialect, value: SeedValue) => string
 > = {
   boolean: (dialect, value) =>
-    converterFor(dialect).defaults.Boolean(Boolean(value))!,
+    dialectConverter(dialect).conversions.boolean.defaults.Boolean(
+      value ? "true" : "false",
+    ),
   number: (_dialect, value) => String(value),
   reference: (_dialect, value) => String(value),
 };
@@ -69,8 +70,8 @@ const seedUuid = (tableName: string, id: number): string => {
   return bytesToUuidString(bytes);
 };
 
-/** INSERT/UPDATE/DELETE (and sequenced-id wraps) for one dialect's seed rows. */
-export class SeedGenerator {
+/** INSERT seed rows (and sequenced-id wraps) for one dialect. */
+class SeedGenerator {
   readonly dialect: SqlDialect;
   readonly idType: string;
   readonly withUuidColumn: boolean;
@@ -87,23 +88,22 @@ export class SeedGenerator {
     const out: string[] = [];
     const sequenced = this.idType !== "uuid" && this.idType !== "string";
     const quoted = q(this.dialect, table.name);
-    const conv = converterFor(this.dialect);
 
     if (sequenced) {
-      const before = conv.seedBefore(quoted);
+      const before = renderSeedBefore(this.dialect, quoted);
       if (before) out.push(before);
     }
     for (const { id, row } of table.seeds) {
       out.push(this.insert(table, { id, row }));
     }
     if (sequenced) {
-      const after = conv.seedAfter(table.name, quoted);
+      const after = renderSeedAfter(this.dialect, table.name, quoted);
       if (after) out.push(after);
     }
     return out;
   }
 
-  insert(table: NormalizedTable, seed: SeedRow): string {
+  private insert(table: NormalizedTable, seed: SeedRow): string {
     const { id, row } = seed;
     const { cols, fieldByName } = this.colsForRow(table, row);
     const uuidSourceName = table.entityName ?? table.name;
@@ -117,24 +117,6 @@ export class SeedGenerator {
       colList: cols.map((c) => q(this.dialect, c)).join(", "),
       valueList: values.join(", "),
     }).trimEnd();
-  }
-
-  update(table: NormalizedTable, seed: SeedRow): string {
-    const { id, row } = seed;
-    const fieldByName = new Map(
-      table.fields.map((f): [string, NormalizedField] => [f.name, f]),
-    );
-    const assignments = Object.keys(row)
-      .map(
-        (col) =>
-          `${q(this.dialect, col)} = ${this.colValue(fieldByName.get(col), { row, col })}`,
-      )
-      .join(", ");
-    return `UPDATE ${q(this.dialect, table.name)} SET ${assignments} WHERE ${q(this.dialect, "id")} = ${id};`;
-  }
-
-  delete(table: NormalizedTable, id: number): string {
-    return `DELETE FROM ${q(this.dialect, table.name)} WHERE ${q(this.dialect, "id")} = ${id};`;
   }
 
   private colsForRow(
@@ -165,7 +147,7 @@ export class SeedGenerator {
     if (!field) return "NULL";
     const v = Object.prototype.hasOwnProperty.call(row, col) ? row[col] : null;
     if (v === null || v === undefined) {
-      const dv = renderSqlDefault(converterFor(this.dialect), field);
+      const dv = sqlDefault(this.dialect, field);
       return dv !== null ? dv : "NULL";
     }
     return this.renderValue(field, v as SeedValue);
