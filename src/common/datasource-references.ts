@@ -1,5 +1,3 @@
-import { referenceFieldShape } from "./datasource-settings.ts";
-
 type FieldDef = {
   type?: string;
   size?: number;
@@ -52,7 +50,15 @@ export const resolveReferenceParentType = (
   if (!parentDef) return null;
   const pk = explicitPk(parentDef);
   if (pk) return parts[1] === pk[0] ? { type: pk[1].type, size: pk[1].size } : null;
-  return parts[1] === "id" ? referenceFieldShape(idType) : null;
+  return parts[1] === "id"
+    ? idType === "string"
+      ? { type: "string", size: 64 }
+      : {
+          type:
+            idType === "biginteger" || idType === "uuid" ? idType : "number",
+          size: undefined,
+        }
+    : null;
 };
 
 /** Stamp parent-PK `type`/`size` onto type-less `references` fields. Mutates + returns. */

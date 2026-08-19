@@ -5,8 +5,8 @@
   "type": "module",
   "exports": {
     "./generate-context": {
-      "types": "./dist/generate-context.d.ts",
-      "import": "./dist/generate-context.js"
+      "types": "./dist/common/generate-context.d.ts",
+      "import": "./dist/common/generate-context.js"
     },
     "./generate-sql": {
       "types": "./dist/generate-sql.d.ts",
@@ -36,6 +36,7 @@
     "typecheck": "tsc -p tsconfig.build.json --noEmit"
   },
   "dependencies": {
+    "@deterministic-code/generators-common": "github:deterministic-code/generators-common",
     "mustache": "^4.2.0",
     "pluralize": "^8.0.0",
     "yaml": "^2.6.0"

@@ -1,4 +1,4 @@
-import { fill } from "../fill.ts";
+import { fill } from "@deterministic-code/generators-common/fill";
 import {
   pkFieldOf,
   writableNonAuditFields,

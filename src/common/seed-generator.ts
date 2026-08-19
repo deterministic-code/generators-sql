@@ -1,16 +1,14 @@
 import { createHash } from "node:crypto";
-import {
-  datasourceSettingsFor,
-  tableHasAuditColumns,
-} from "./datasource-settings.ts";
 import { converterFor } from "../field-converters/index.ts";
 import {
   renderSqlDefault,
   sqlStringLiteral,
 } from "../field-converters/base.ts";
-import { fill } from "./fill.ts";
+import { fill } from "@deterministic-code/generators-common/fill";
 import { q, type SqlDialect } from "./sql-dialect.ts";
 import {
+  datasourceSettingsFor,
+  tableHasAuditColumns,
   type GenerateTableOptions,
   type NormalizedField,
   type NormalizedTable,

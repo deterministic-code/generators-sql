@@ -1,4 +1,4 @@
-import { content, type GenerateEntry } from "./generate-entry.ts";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 
 type MigrationChain = {
   up: { path: string; content: string };

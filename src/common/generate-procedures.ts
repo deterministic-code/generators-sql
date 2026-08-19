@@ -1,12 +1,8 @@
-import { fill } from "./fill.ts";
+import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "./generate-context.ts";
-import type { GenerateEntry } from "./generate-entry.ts";
+import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { chainMigrationEntries } from "./migration-entries.ts";
-import { parseDatasourceTypes } from "./parse-datasource-types.ts";
-import {
-  datasourceSettings,
-  tableHasAuditColumns,
-} from "./datasource-settings.ts";
+import { parseDatasourceTypes } from "../parse-datasource-types.ts";
 import { byFieldsFromDatasource } from "./datasource-by-fields.ts";
 import {
   normalizeDialect,
@@ -15,6 +11,8 @@ import {
 } from "./sql-dialect.ts";
 import {
   buildLiveTables,
+  datasourceSettings,
+  tableHasAuditColumns,
   type GenerateTableOptions,
   type NormalizedTable,
   type SchemaData,
