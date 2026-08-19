@@ -1,23 +1,15 @@
 import { effectiveTableName } from "./effective-table-name.ts";
-import { fill } from "./fill.ts";
+import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "./generate-context.ts";
-import { content, type GenerateEntry } from "./generate-entry.ts";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { chainMigrationEntries } from "./migration-entries.ts";
-import { parseDatasourceTypes } from "./parse-datasource-types.ts";
-import {
-  datasourceSettings,
-  datasourceSettingsFor,
-  tableHasAuditColumns,
-} from "./datasource-settings.ts";
-import {
-  mapColumnType,
-  q,
-  requireDialect,
-  type SqlDialect,
-} from "./sql-dialect.ts";
+import { parseDatasourceTypes } from "../parse-datasource-types.ts";
 import {
   buildLiveTables,
   buildTableNameMappings,
+  datasourceSettings,
+  datasourceSettingsFor,
+  tableHasAuditColumns,
   type GenerateTableOptions,
   type NormalizedField,
   type NormalizedIndex,
@@ -25,6 +17,12 @@ import {
   type SchemaData,
   type SqlFile,
 } from "./sql-schema.ts";
+import {
+  mapColumnType,
+  q,
+  requireDialect,
+  type SqlDialect,
+} from "./sql-dialect.ts";
 import { buildCustomMigrationFiles } from "./generate-custom-migrations.ts";
 import { assertSkipMigrationsCovered } from "./validate-skip-migrations-coverage.ts";
 import { converterFor } from "../field-converters/index.ts";

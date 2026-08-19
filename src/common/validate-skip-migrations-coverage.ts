@@ -1,8 +1,8 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { entityUsesOptimisticConcurrency } from "./datasource-settings.ts";
 import { requireDialect, type SqlDialect } from "./sql-dialect.ts";
 import {
+  entityUsesOptimisticConcurrency,
   mappedTableNameForEntity,
   normalizeTable,
   type SchemaData,

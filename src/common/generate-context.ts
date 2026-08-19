@@ -1,12 +1,7 @@
-import { memoryReader, type IDeterministicReader } from "./deterministic-reader.ts";
+import { memoryReader } from "@deterministic-code/generators-common/deterministic-reader";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 
-/** Flat settings the generate runner passes every lane (dotted keys, string values). */
-export type SettingsDict = Record<string, string>;
-
-export type GenerateContext = {
-  reader: IDeterministicReader;
-  settings: SettingsDict;
-};
+export type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 
 /** Host `{ inputs, settings }` shape used by dynamic generation. */
 export type DeterministicInputs = {
@@ -19,7 +14,7 @@ export type DeterministicInputs = {
 
 export type GenerateArg =
   | GenerateContext
-  | { inputs: DeterministicInputs; settings: SettingsDict };
+  | { inputs: DeterministicInputs; settings: Record<string, string> };
 
 /** Pack-owned reader from `GenerateContext` or from `inputs.all()`. */
 export const contextFrom = async (arg: GenerateArg): Promise<GenerateContext> => {

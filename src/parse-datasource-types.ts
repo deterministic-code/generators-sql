@@ -2,11 +2,7 @@ import { parse } from "yaml";
 import {
   materializeReferenceTypes,
   type DatasourceTypes,
-} from "./datasource-references.ts";
-import {
-  datasourceSettings,
-  type SettingsDict,
-} from "./datasource-settings.ts";
+} from "./common/datasource-references.ts";
 
 type SeedRows = unknown[];
 type Named = Record<string, unknown>;
@@ -57,10 +53,10 @@ const hydrateSeeds = (
 /** Parse datasource_types YAML, resolve type-less `references`, optionally hydrate seeds. */
 export const parseDatasourceTypes = (
   datasourceYamlText: string,
-  settings: SettingsDict,
+  settings: Record<string, string>,
   seedsYamlText?: string | null,
 ): DatasourceTypes => {
-  const { idType } = datasourceSettings(settings);
+  const idType = settings["datasource.id_type"] ?? "integer";
   const data = materializeReferenceTypes(
     parse(datasourceYamlText) as DatasourceTypes,
     idType,

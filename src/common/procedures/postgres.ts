@@ -1,5 +1,5 @@
 import { mapColumnType } from "../sql-dialect.ts";
-import { fill } from "../fill.ts";
+import { fill } from "@deterministic-code/generators-common/fill";
 import {
   hasSystemUuidColumn,
   writableNonAuditFields,

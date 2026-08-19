@@ -2,7 +2,7 @@ import {
   contextFrom,
   type GenerateArg,
 } from "./common/generate-context.ts";
-import type { GenerateEntry } from "./common/generate-entry.ts";
+import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { generateSqlFor } from "./common/generate-sql.ts";
 import { dialectsFromSettings } from "./common/sql-dialect.ts";
 

@@ -1,10 +1,74 @@
 import { effectiveTableName } from "./effective-table-name.ts";
 import { resolveReferenceParentType } from "./datasource-references.ts";
-import {
-  datasourceSettingsFor,
-  type DatasourceOptions,
-} from "./datasource-settings.ts";
 import { requireDialect } from "./sql-dialect.ts";
+
+export type DatasourceOptions = {
+  idType?: string;
+  pluralizeTableNames?: boolean;
+  useStoredProcedures?: boolean;
+  useOptimisticConcurrency?: boolean;
+};
+
+const fromIdType = (
+  idType: string,
+  extras: {
+    pluralizeTableNames: boolean;
+    useStoredProcedures: boolean;
+    useOptimisticConcurrency: boolean;
+  },
+) => ({
+  idType,
+  withUuidColumn: idType !== "uuid",
+  ...extras,
+});
+
+export const datasourceSettings = (settings: Record<string, string>) =>
+  fromIdType(settings["datasource.id_type"] ?? "integer", {
+    pluralizeTableNames:
+      settings["datasource.pluralize_datatable_names"] === "true",
+    useStoredProcedures:
+      settings["datasource.use_stored_procedures"] === "true",
+    useOptimisticConcurrency:
+      settings["datasource.use_optimistic_concurrency"] === "true",
+  });
+
+export const datasourceSettingsFor = (opts: DatasourceOptions = {}) => {
+  const { idType = "integer", ...rest } = opts;
+  return fromIdType(idType, {
+    pluralizeTableNames: true,
+    useStoredProcedures: false,
+    useOptimisticConcurrency: false,
+    ...rest,
+  });
+};
+
+export const entityUsesOptimisticConcurrency = (
+  table: { datasourceType?: string; optimisticConcurrency?: boolean },
+  globalFlag: boolean,
+): boolean =>
+  table.datasourceType !== "many-to-many" &&
+  table.datasourceType !== "readonly-lookup" &&
+  (table.optimisticConcurrency ?? globalFlag);
+
+export const tableHasAuditColumns = (
+  table: {
+    datasourceType?: string;
+    optimisticConcurrency?: boolean;
+    fields: { name: string; primaryKey: boolean }[];
+  },
+  opts: { useOptimisticConcurrency?: boolean } = {},
+): boolean => {
+  if (table.datasourceType === "readonly-lookup") return false;
+  const hasCustomPk = table.fields.some(
+    (f) => f.primaryKey && f.name !== "id",
+  );
+  const occ = entityUsesOptimisticConcurrency(
+    table,
+    opts.useOptimisticConcurrency === true,
+  );
+  if (hasCustomPk) return occ;
+  return true;
+};
 
 /** YAML/JSON seed cell — scalar leaf of a parsed datasource seed row. */
 export type SeedValue = string | number | boolean | null;
