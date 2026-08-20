@@ -1,9 +1,4 @@
-import {
-  readCustomMigrationPairs,
-  type CustomMigrationPair,
-} from "./custom-migrations-source.ts";
-
-export type { CustomMigrationPair };
+import { readCustomMigrationPairs } from "./custom-migrations-source.ts";
 
 const CUSTOM_TOKEN = "_custom_";
 
@@ -12,7 +7,6 @@ type Direction = "up" | "down";
 interface CustomMigrationFile {
   filename: string;
   content: string;
-  source?: string;
 }
 
 function generatedFilenameForCustom(
@@ -39,23 +33,6 @@ export async function buildCustomMigrationFiles(
   dialect: string,
 ): Promise<CustomMigrationFile[]> {
   const pairs = await readCustomMigrationPairs(deterministicDir, dialect);
-  return pairs.flatMap((pair) => [
-    {
-      filename: generatedFilenameForCustom(pair.order, pair.name, "up"),
-      content: pair.up,
-      source: pair.upSourcePath,
-    },
-    {
-      filename: generatedFilenameForCustom(pair.order, pair.name, "down"),
-      content: pair.down,
-      source: pair.downSourcePath,
-    },
-  ]);
-}
-
-export function generateFilesFromPairs(
-  pairs: CustomMigrationPair[],
-): CustomMigrationFile[] {
   return pairs.flatMap((pair) => [
     {
       filename: generatedFilenameForCustom(pair.order, pair.name, "up"),

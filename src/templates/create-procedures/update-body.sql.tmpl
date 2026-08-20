@@ -1,0 +1,3 @@
+  SET {{#sets}}{{#first}}{{lhs}}{{{padEq}}}{{{rhs}}}{{/first}}{{^first}}
+      {{lhs}}{{{padEq}}}{{{rhs}}}{{/first}}{{^last}},{{/last}}{{/sets}}
+  WHERE {{{where}}};

@@ -4,6 +4,7 @@
   "description": "SQL generator pack for the deterministic toolchain: per-dialect DDL/migration/stored-procedure emit.",
   "type": "module",
   "exports": {
+    "./package.json": "./package.json",
     "./generate-context": {
       "types": "./dist/common/generate-context.d.ts",
       "import": "./dist/common/generate-context.js"
@@ -23,12 +24,12 @@
     "./*/*": {
       "types": "./dist/*/*.d.ts",
       "import": "./dist/*/*.js"
-    },
-    "./package.json": "./package.json"
+    }
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "tsconfig.build.json"
   ],
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json && cp -R src/templates dist/",
@@ -37,12 +38,10 @@
   },
   "dependencies": {
     "@deterministic-code/generators-common": "github:deterministic-code/generators-common",
-    "mustache": "^4.2.0",
     "pluralize": "^8.0.0",
     "yaml": "^2.6.0"
   },
   "devDependencies": {
-    "@types/mustache": "^4.2.6",
     "@types/node": "^22.10.0",
     "@types/pluralize": "^0.0.33",
     "typescript": "^5.8.0"

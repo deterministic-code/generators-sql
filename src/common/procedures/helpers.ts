@@ -16,7 +16,7 @@ interface ProcTable {
 }
 
 /** The implicit primary key for an entity that declares none, keyed off the resolved `id_type`. */
-export function implicitIdField(idType: string | undefined): ProcField {
+function implicitIdField(idType: string | undefined): ProcField {
   switch (idType) {
     case "uuid":
       return { name: "id", type: "uuid" };
@@ -62,7 +62,7 @@ export function hasSystemUuidColumn(idType: string | undefined): boolean {
 }
 
 /** The ordered column list for an entity's SELECT/INSERT: pk, the system `uuid` (unless the pk itself is the uuid), the writable columns, then `created`/`updated`. */
-export function allColumnNames(
+function allColumnNames(
   table: ProcTable,
   idType: string | undefined,
 ): string[] {

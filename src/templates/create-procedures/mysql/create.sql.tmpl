@@ -14,7 +14,12 @@ BEGIN
 {{^generatedId}}
   INSERT INTO {{tableTok}} ({{cols}})
   VALUES ({{vals}});
-  {{{selectAfterWrite}}}
+{{#lastInsertId}}
+  SELECT LAST_INSERT_ID() AS {{pkName}};
+{{/lastInsertId}}
+{{^lastInsertId}}
+  SELECT t.{{pkName}} AS {{pkName}} FROM {{tableTok}} t WHERE t.uuid = uuid;
+{{/lastInsertId}}
 {{/generatedId}}
 END;
 GO
