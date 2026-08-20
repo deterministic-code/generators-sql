@@ -1,12 +1,14 @@
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { SpecificationParser } from "@deterministic-code/generators-common/specification-parser";
+import { DeterministicParser } from "@deterministic-code/generators-common/specification-parser";
+import { DATASOURCE_TYPES_YAML } from "@deterministic-code/generators-common/specification";
 import { byFieldsFromDatasource } from "./datasource-by-fields.ts";
 import type { SqlDialect } from "./sql-dialect.ts";
 import {
   buildLiveTables,
   datasourceSettings,
+  hasAuditColumns,
   type LiveTable,
 } from "./sql-schema.ts";
 import {
@@ -44,14 +46,6 @@ const PACKS: Partial<Record<SqlDialect, Pack>> = {
   sqlserver: { dialect: sqlserver, kind: "procedure", up: ssUp, down: ssDown },
 };
 
-const hasAuditColumns = (table: LiveTable, occ: boolean): boolean => {
-  if (table.datasourceType === "readonly-lookup") return false;
-  const customPk = table.fields.some((f) => f.isPrimaryKey && f.name !== "id");
-  if (!customPk) return true;
-  if (table.datasourceType === "many-to-many") return false;
-  return table.optimisticConcurrency ?? occ;
-};
-
 const withNl = (text: string): string =>
   text.endsWith("\n") ? text : `${text}\n`;
 
@@ -64,15 +58,15 @@ export const generateProceduresForDialect = async (
   const ds = datasourceSettings(ctx.settings);
   if (!pack || !ds.useStoredProcedures) return [];
 
-  const types = await new SpecificationParser(ctx.reader).loadDatasourceTypes(
-    ds.idType,
-  );
+  await ctx.reader.read(DATASOURCE_TYPES_YAML);
+  const types = (await DeterministicParser(ctx.reader).parse(ctx.settings))
+    .expandedDatasourceTypes;
 
   const occ = ds.useOptimisticConcurrency;
   const byFields = byFieldsFromDatasource(types);
   const tables = buildLiveTables(dialect, types, {
     pluralizeTableNames: ds.pluralizeTableNames,
-  }).filter((t) => hasAuditColumns(t, occ));
+  }).filter((t) => hasAuditColumns(t));
   if (tables.length === 0) return [];
 
   const parts = tables.map((t) => {

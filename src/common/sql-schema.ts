@@ -48,6 +48,10 @@ export const datasourceSettingsFor = (opts: DatasourceOptions = {}) => {
 
 export type LiveTable = DatasourceType & { tableName: string };
 
+export const hasAuditColumns = (table: { fields: { name: string }[] }): boolean =>
+  table.fields.some((f) => f.name === "created") &&
+  table.fields.some((f) => f.name === "updated");
+
 export type SqlFile = { path: string; content: string };
 
 const topoSort = (tables: LiveTable[]): LiveTable[] => {

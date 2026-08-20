@@ -67,29 +67,15 @@ const seedUuid = (tableName: string, id: number): string => {
   return bytesToUuidString(bytes);
 };
 
-const hasAuditColumns = (table: LiveTable, occ: boolean): boolean => {
-  if (table.datasourceType === "readonly-lookup") return false;
-  const hasCustomPk = table.fields.some(
-    (f) => f.isPrimaryKey && f.name !== "id",
-  );
-  if (!hasCustomPk) return true;
-  if (table.datasourceType === "many-to-many") return false;
-  return table.optimisticConcurrency ?? occ;
-};
-
 /** INSERT seed rows (and sequenced-id wraps) for one dialect. */
 class SeedGenerator {
   readonly dialect: SqlDialect;
   readonly idType: string;
-  readonly withUuidColumn: boolean;
-  readonly occ: boolean;
 
   constructor(dialect: SqlDialect, opts: DatasourceOptions = {}) {
     const settings = datasourceSettingsFor(opts);
     this.dialect = dialect;
     this.idType = settings.idType;
-    this.withUuidColumn = opts.withUuidColumn ?? settings.withUuidColumn;
-    this.occ = opts.useOptimisticConcurrency === true;
   }
 
   generate(table: LiveTable, seeds: SeedRow[]): string[] {
@@ -135,10 +121,10 @@ class SeedGenerator {
     table: LiveTable,
     row: Record<string, unknown>,
   ): { cols: string[]; fieldByName: Map<string, DatasourceField> } {
-    const withAudit = hasAuditColumns(table, this.occ);
+    const fieldNames = new Set(table.fields.map((f) => f.name));
     const colNames = new Set<string>();
-    if (this.withUuidColumn && withAudit) colNames.add("uuid");
-    colNames.add("id");
+    if (fieldNames.has("id")) colNames.add("id");
+    if (fieldNames.has("uuid")) colNames.add("uuid");
     for (const k of Object.keys(row)) {
       if (k !== "id" && k !== "uuid") colNames.add(k);
     }

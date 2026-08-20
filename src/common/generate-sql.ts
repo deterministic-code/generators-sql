@@ -8,11 +8,13 @@ import type {
 } from "@deterministic-code/generators-common/specification";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { SpecificationParser } from "@deterministic-code/generators-common/specification-parser";
+import { DeterministicParser } from "@deterministic-code/generators-common/specification-parser";
+import { DATASOURCE_TYPES_YAML } from "@deterministic-code/generators-common/specification";
 import {
   buildLiveTables,
   datasourceSettings,
   datasourceSettingsFor,
+  hasAuditColumns,
   type DatasourceOptions,
   type LiveTable,
   type SqlFile,
@@ -43,16 +45,6 @@ import {
   renderPreamble,
   renderUpdatedTrigger,
 } from "./render-ddl.ts";
-
-const hasAuditColumns = (table: LiveTable, occ = false): boolean => {
-  if (table.datasourceType === "readonly-lookup") return false;
-  const hasCustomPk = table.fields.some(
-    (f) => f.isPrimaryKey && f.name !== "id",
-  );
-  if (!hasCustomPk) return true;
-  if (table.datasourceType === "many-to-many") return false;
-  return table.optimisticConcurrency ?? occ;
-};
 
 const finalizeSql = (text: string): string => {
   const out = text.replace(/\n{3,}/g, "\n\n");
@@ -161,55 +153,69 @@ const tableColumnLines = (
   opts: DatasourceOptions,
 ): string[] => {
   const settings = datasourceSettingsFor(opts);
-  const withAudit = hasAuditColumns(
-    table,
-    opts.useOptimisticConcurrency === true,
-  );
-  const withUuid =
-    (opts.withUuidColumn ?? settings.withUuidColumn) &&
-    withAudit &&
-    !table.fields.some((f) => f.name === "uuid");
   const pluralize = opts.pluralizeTableNames === true;
   const physical = table.tableName;
+  const pkName = constraintIdent(dialect, physical, "primary_key");
+  const utcNow =
+    dialectConverter(dialect).conversions.datetime.defaults.UtcNow("");
+
+  const timestampLine = (name: string): string => {
+    const hasDefault = utcNow !== null;
+    return columnLine({
+      quotedName: q(dialect, name),
+      nativeType: mapColumnType(dialect, { type: "datetime" }),
+      notNull: true,
+      hasDefault,
+      namedDefault: hasDefault && supportsNamedDefault(dialect),
+      quotedDefaultName:
+        hasDefault && supportsNamedDefault(dialect)
+          ? constraintIdent(dialect, physical, name, "default_constraint")
+          : undefined,
+      defaultExpr: utcNow ?? undefined,
+    });
+  };
 
   const lines: string[] = [];
-  const pkName = constraintIdent(dialect, physical, "primary_key");
-  if (!table.fields.some((f) => f.isPrimaryKey)) {
-    const idType = settings.idType;
-    const idLine = fill(dialectSql[dialect].idColumn, {
-      quotedName: q(dialect, "id"),
-      quotedPkName: pkName,
-      quotedDefaultName: constraintIdent(
-        dialect,
-        physical,
-        "id",
-        "default_constraint",
-      ),
-      integer: idType === "integer",
-      biginteger: idType === "biginteger",
-      uuid: idType === "uuid",
-      string: idType === "string",
-    }).trimEnd();
-    if (idLine.length > 0) lines.push(idLine);
-  }
-  if (withUuid) {
-    lines.push(
-      fill(dialectSql[dialect].uuidColumn, {
-        quotedName: q(dialect, "uuid"),
+  const extras: string[] = [];
+  for (const f of table.fields) {
+    if (f.name === "id" && f.isPrimaryKey === true) {
+      const idType = settings.idType;
+      const idLine = fill(dialectSql[dialect].idColumn, {
+        quotedName: q(dialect, "id"),
+        quotedPkName: pkName,
         quotedDefaultName: constraintIdent(
           dialect,
           physical,
-          "uuid",
+          "id",
           "default_constraint",
         ),
-      }).trimEnd(),
-    );
-  }
-  const extras: string[] = [];
-  if (withUuid) {
-    extras.push(uniqueConstraint(dialect, physical, "uuid"));
-  }
-  for (const f of table.fields) {
+        integer: idType === "integer",
+        biginteger: idType === "biginteger",
+        uuid: idType === "uuid",
+        string: idType === "string",
+      }).trimEnd();
+      if (idLine.length > 0) lines.push(idLine);
+      continue;
+    }
+    if (f.name === "uuid") {
+      lines.push(
+        fill(dialectSql[dialect].uuidColumn, {
+          quotedName: q(dialect, "uuid"),
+          quotedDefaultName: constraintIdent(
+            dialect,
+            physical,
+            "uuid",
+            "default_constraint",
+          ),
+        }).trimEnd(),
+      );
+      extras.push(uniqueConstraint(dialect, physical, "uuid"));
+      continue;
+    }
+    if (f.name === "created" || f.name === "updated") {
+      lines.push(timestampLine(f.name));
+      continue;
+    }
     lines.push(columnDef(dialect, physical, f));
     if (f.isUnique === true) {
       extras.push(uniqueConstraint(dialect, physical, f.name));
@@ -217,26 +223,6 @@ const tableColumnLines = (
     if (f.references) {
       extras.push(foreignKey(dialect, physical, f, pluralize));
     }
-  }
-  if (withAudit) {
-    const utcNow =
-      dialectConverter(dialect).conversions.datetime.defaults.UtcNow("");
-    const ts = (name: string) => {
-      const hasDefault = utcNow !== null;
-      return columnLine({
-        quotedName: q(dialect, name),
-        nativeType: mapColumnType(dialect, { type: "datetime" }),
-        notNull: true,
-        hasDefault,
-        namedDefault: hasDefault && supportsNamedDefault(dialect),
-        quotedDefaultName:
-          hasDefault && supportsNamedDefault(dialect)
-            ? constraintIdent(dialect, physical, name, "default_constraint")
-            : undefined,
-        defaultExpr: utcNow ?? undefined,
-      });
-    };
-    lines.push(ts("created"), ts("updated"));
   }
   return [...lines, ...extras];
 };
@@ -279,7 +265,7 @@ const flattenTable = (
   return {
     createTable: createTableSql(dialect, table, opts),
     indexesBlock: indexes.join("\n"),
-    trigger: hasAuditColumns(table, opts.useOptimisticConcurrency === true)
+    trigger: hasAuditColumns(table)
       ? renderUpdatedTrigger(dialect, {
           name: table.tableName,
           fields: table.fields,
@@ -350,15 +336,15 @@ const customEntries = async (
 
 const loadSchema = async (
   ctx: GenerateContext,
-  idType: string,
 ): Promise<{
   types: DatasourceType[];
   seeds: Map<string, SeedRow[]>;
 }> => {
-  const parser = new SpecificationParser(ctx.reader);
+  await ctx.reader.read(DATASOURCE_TYPES_YAML);
+  const spec = await DeterministicParser(ctx.reader).parse(ctx.settings);
   return {
-    types: await parser.loadDatasourceTypes(idType),
-    seeds: await parser.loadDatasourceSeeds(),
+    types: spec.expandedDatasourceTypes,
+    seeds: spec.datasourceSeeds,
   };
 };
 
@@ -369,7 +355,7 @@ export const generateSqlFor = async (
 ): Promise<GenerateEntry[]> => {
   const key = requireDialect(dialect);
   const ds = datasourceSettings(ctx.settings);
-  const data = await loadSchema(ctx, ds.idType);
+  const data = await loadSchema(ctx);
   const dir = ctx.settings["paths.deterministic"];
   const initial = generateInitialMigration(key, data.types, data.seeds, {
     idType: ds.idType,
