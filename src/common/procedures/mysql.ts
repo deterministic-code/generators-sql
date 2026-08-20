@@ -1,4 +1,5 @@
 import { fill } from "@deterministic-code/generators-common/fill";
+import { mapColumnType } from "../sql-dialect.ts";
 import {
   hasSystemUuidColumn,
   writableNonAuditFields,
@@ -7,7 +8,6 @@ import {
 } from "./helpers.ts";
 import {
   renderInParams,
-  charParamType,
   makeGenerateUpdate,
   type ProcField,
   type ProcTable,
@@ -27,25 +27,14 @@ import {
 } from "../../resources/procedures-mysql.ts";
 
 const dialectName = "mysql";
-const auditType = "VARCHAR(64)";
-
+const native = (type: string): string =>
+  mapColumnType(dialectName, { type });
+const auditType = native("datetime");
 const paramType = (field: ProcField): string =>
-  charParamType(field, "VARCHAR", dialectName);
+  mapColumnType(dialectName, field);
 
 const renderParams = (params: Param[]): string =>
   renderInParams(params, "IN ");
-
-const mysqlValueExpr = (name: string): string => {
-  if (
-    name === "created" ||
-    name === "updated" ||
-    name === "new_updated" ||
-    name === "expected_updated"
-  ) {
-    return `CAST(REPLACE(REPLACE(${name}, 'T', ' '), 'Z', '') AS DATETIME(6))`;
-  }
-  return name;
-};
 
 const createProcParams = (
   table: ProcTable,
@@ -54,11 +43,11 @@ const createProcParams = (
   const writable = writableNonAuditFields(table, idType);
   return [
     ...(hasSystemUuidColumn(idType)
-      ? [{ name: "uuid", type: "VARCHAR(36)" }]
+      ? [{ name: "uuid", type: native("uuid") }]
       : []),
     ...writable.map((f) => ({ name: f.name, type: paramType(f) })),
-    { name: "created", type: "VARCHAR(64)" },
-    { name: "updated", type: "VARCHAR(64)" },
+    { name: "created", type: auditType },
+    { name: "updated", type: auditType },
   ];
 };
 
@@ -78,10 +67,10 @@ const generateCreate = ({
     ? [
         "new_id",
         ...writable.map((f) => f.name),
-        mysqlValueExpr("created"),
-        mysqlValueExpr("updated"),
+        "created",
+        "updated",
       ]
-    : cols.map((c) => mysqlValueExpr(c));
+    : cols;
   return fill(createTmpl, {
     entityName,
     params: renderParams(createProcParams(table, idType)),
@@ -138,7 +127,7 @@ const generateFindBy = (
 const updateDialect: UpdateProcDialect = {
   colRef: (c) => `t.${c}`,
   setLhs: (c) => `t.${c}`,
-  argRef: (c) => mysqlValueExpr(c),
+  argRef: (c) => c,
   wrap: (ctx, { name, params }, updateBody) =>
     fill(updateTmpl, {
       name,
@@ -171,7 +160,6 @@ const generateDeleteOcc = (
     params: renderParams(params),
     tableTok,
     pkName: pk.name,
-    expectedUpdated: mysqlValueExpr("expected_updated"),
   }).trimEnd();
 
 export const dialect: Dialect = {

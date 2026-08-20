@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { SQL_DIALECTS, normalizeDialect } from "./sql-dialect.ts";
+import { requireDialect } from "./sql-dialect.ts";
 
 const FILENAME_RE = /^(\d+)_([A-Za-z0-9][A-Za-z0-9_-]*)_(up|down)\.sql$/;
 
@@ -19,13 +19,7 @@ interface Slot {
 }
 
 function dialectDir(deterministicDir: string, dialect: string): string {
-  const key = normalizeDialect(dialect);
-  if (!key) {
-    throw new Error(
-      `customMigrationsDirFor: unknown SQL dialect "${dialect}". Valid: ${SQL_DIALECTS.join(", ")}.`,
-    );
-  }
-  return join(deterministicDir, "custom", key);
+  return join(deterministicDir, "custom", requireDialect(dialect));
 }
 
 async function listSqlFiles(dir: string): Promise<string[] | null> {

@@ -1,6 +1,6 @@
 /** The CRUD stored-procedure driver shared by the postgres/mysql/sqlserver generators: the canonical operation set and routine names (`procedureSpecs`), the per-op fan-out (`generateProceduresFor`), and the dialect-parameterized param rendering + char-type mapping. The dialect-specific SQL bodies stay in each dialect module's `generate*` ops; everything that is the same across dialects lives here so the CREATE order and the down-migration DROP names cannot drift. */
 import { fill } from "@deterministic-code/generators-common/fill";
-import { q, mapColumnType } from "../sql-dialect.ts";
+import { q } from "../sql-dialect.ts";
 import {
   paramsTmpl,
   updateBodyTmpl,
@@ -209,19 +209,6 @@ export function renderInParams(params: Param[], prefix = ""): string {
       last: i === params.length - 1,
     })),
   }).trimEnd();
-}
-
-/** The char-column-family param type shared by mysql/sqlserver: bigint pk, the fixed uuid/audit string widths (`text` is `VARCHAR`/`NVARCHAR`), else the dialect's mapped column type. */
-export function charParamType(
-  field: ProcField,
-  text: string,
-  dialect: string,
-): string {
-  if (field.type === "biginteger") return "BIGINT";
-  if (field.name === "uuid") return `${text}(36)`;
-  if (field.name === "created" || field.name === "updated")
-    return `${text}(64)`;
-  return mapColumnType(dialect, field);
 }
 
 /** Resolve a by-field column, throwing the standard "not declared" error keyed by the procedure name. */

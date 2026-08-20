@@ -26,12 +26,11 @@ import {
 } from "../../resources/procedures-postgres.ts";
 
 const dialectName = "postgres";
-const auditType = "TIMESTAMPTZ";
-
-const paramType = (field: ProcField): string => {
-  if (field.type === "biginteger") return "BIGINT";
-  return mapColumnType(dialectName, field);
-};
+const native = (type: string): string =>
+  mapColumnType(dialectName, { type });
+const auditType = native("datetime");
+const paramType = (field: ProcField): string =>
+  mapColumnType(dialectName, field);
 
 const generateCreate = ({
   entityName,
@@ -43,13 +42,13 @@ const generateCreate = ({
   const writable = writableNonAuditFields(table, idType);
   const pkType = paramType(pk);
   const uuidParam: Param[] = hasSystemUuidColumn(idType)
-    ? [{ name: "uuid", type: "UUID" }]
+    ? [{ name: "uuid", type: native("uuid") }]
     : [];
   const params: Param[] = [
     ...uuidParam,
     ...writable.map((f) => ({ name: f.name, type: paramType(f) })),
-    { name: "created", type: "TIMESTAMPTZ" },
-    { name: "updated", type: "TIMESTAMPTZ" },
+    { name: "created", type: auditType },
+    { name: "updated", type: auditType },
   ];
   const cols = [
     ...(hasSystemUuidColumn(idType) ? ["uuid"] : []),

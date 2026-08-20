@@ -4,11 +4,11 @@ import { dialectConverter, q, type SqlDialect } from "./sql-dialect.ts";
 
 type TriggerTable = {
   name: string;
-  fields: { name: string; primaryKey: boolean }[];
+  fields: { name: string; isPrimaryKey?: boolean }[];
 };
 
 const triggerTokens = (dialect: SqlDialect, table: TriggerTable) => {
-  const pk = table.fields.find((f) => f.primaryKey);
+  const pk = table.fields.find((f) => f.isPrimaryKey === true);
   return {
     quotedTable: q(dialect, table.name),
     quotedTrigger: q(dialect, `trg_${table.name}_updated_at`),
