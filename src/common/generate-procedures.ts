@@ -26,6 +26,7 @@ import {
 import { dialect as postgres } from "./procedures/postgres.ts";
 import { dialect as mysql } from "./procedures/mysql.ts";
 import { dialect as sqlserver } from "./procedures/sqlserver.ts";
+import { dropRoutineTmpl } from "../resources/procedures-shared.ts";
 import {
   migrationUpTmpl as pgUp,
   migrationDownTmpl as pgDown,
@@ -81,7 +82,7 @@ type RoutineName = {
   name: string;
 };
 
-export const generateProcedureFile = ({
+const generateProcedureFile = ({
   dialect,
   tables,
   byFieldsByEntity,
@@ -114,7 +115,7 @@ export const generateProcedureFile = ({
     .join("\n\n")}\n`;
 };
 
-export const listProcedureNames = ({
+const listProcedureNames = ({
   dialect,
   tables,
   byFieldsByEntity,
@@ -133,7 +134,7 @@ export const listProcedureNames = ({
   return out;
 };
 
-export const generateStoredProceduresMigration = (
+const generateStoredProceduresMigration = (
   language: string,
   data: SchemaData,
   opts: GenerateTableOptions & { byFieldsByEntity: Map<string, string[]> },
@@ -162,10 +163,12 @@ export const generateStoredProceduresMigration = (
 
   const up = fill(tmpls.up, { body: procText });
   const down = fill(tmpls.down, {
-    drops: names.map((n) => {
-      const verb = n.kind === "function" ? "FUNCTION" : "PROCEDURE";
-      return `DROP ${verb} IF EXISTS ${n.name};`;
-    }),
+    drops: names.map((n) =>
+      fill(dropRoutineTmpl, {
+        verb: n.kind === "function" ? "FUNCTION" : "PROCEDURE",
+        name: n.name,
+      }).trimEnd(),
+    ),
   });
 
   return {

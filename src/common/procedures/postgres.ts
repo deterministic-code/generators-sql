@@ -25,15 +25,15 @@ import {
   deleteOccTmpl,
 } from "../../resources/procedures-postgres.ts";
 
-export const dialectName = "postgres";
-export const auditType = "TIMESTAMPTZ";
+const dialectName = "postgres";
+const auditType = "TIMESTAMPTZ";
 
-export const paramType = (field: ProcField): string => {
+const paramType = (field: ProcField): string => {
   if (field.type === "biginteger") return "BIGINT";
   return mapColumnType(dialectName, field);
 };
 
-export const generateCreate = ({
+const generateCreate = ({
   entityName,
   table,
   idType,
@@ -67,7 +67,7 @@ export const generateCreate = ({
   }).trimEnd();
 };
 
-export const generateFindOne = ({
+const generateFindOne = ({
   entityName,
   table,
   idType,
@@ -82,7 +82,7 @@ export const generateFindOne = ({
     aliasedCols: aliasedColumns(table, idType),
   }).trimEnd();
 
-export const generateFindAll = ({
+const generateFindAll = ({
   entityName,
   table,
   idType,
@@ -96,7 +96,7 @@ export const generateFindAll = ({
     pkName: pk.name,
   }).trimEnd();
 
-export const generateFindBy = (
+const generateFindBy = (
   { entityName, table, idType, tableTok }: RenderCtx,
   field: ProcField,
 ): string =>
@@ -112,18 +112,18 @@ const updateDialect: UpdateProcDialect = {
   colRef: (c) => `t.${c}`,
   setLhs: (c) => c,
   argRef: (c, name) => `${name}.${c}`,
-  wrap: (ctx, { name, params }, updateLines) =>
+  wrap: (ctx, { name, params }, updateBody) =>
     fill(updateTmpl, {
       name,
       params: renderInParams(params),
       tableTok: ctx.tableTok,
-      updateBody: updateLines.join("\n"),
+      updateBody,
     }).trimEnd(),
 };
 
-export const generateUpdate = makeGenerateUpdate(updateDialect);
+const generateUpdate = makeGenerateUpdate(updateDialect);
 
-export const generateDelete = ({
+const generateDelete = ({
   entityName,
   tableTok,
   pk,
@@ -135,7 +135,7 @@ export const generateDelete = ({
     tableTok,
   }).trimEnd();
 
-export const generateDeleteOcc = (
+const generateDeleteOcc = (
   { entityName, tableTok, pk }: RenderCtx,
   params: Param[],
 ): string =>

@@ -6,12 +6,7 @@ import type { GenerateEntry } from "@deterministic-code/generators-common/genera
 import { generateProceduresForDialect } from "./common/generate-procedures.ts";
 import { dialectsFromSettings } from "./common/sql-dialect.ts";
 
-export {
-  generateProceduresForDialect,
-  generateStoredProceduresMigration,
-} from "./common/generate-procedures.ts";
-
-/** Stored-procedure migrations for every dialect that supports them. */
+/** Stored-procedure migrations for dialects in `backend.datasources` that support them. */
 export const generate = async (arg: GenerateArg): Promise<GenerateEntry[]> => {
   const ctx = await contextFrom(arg);
   const entries: GenerateEntry[] = [];

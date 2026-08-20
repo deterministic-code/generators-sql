@@ -1,5 +1,10 @@
 /** The CRUD stored-procedure driver shared by the postgres/mysql/sqlserver generators: the canonical operation set and routine names (`procedureSpecs`), the per-op fan-out (`generateProceduresFor`), and the dialect-parameterized param rendering + char-type mapping. The dialect-specific SQL bodies stay in each dialect module's `generate*` ops; everything that is the same across dialects lives here so the CREATE order and the down-migration DROP names cannot drift. */
+import { fill } from "@deterministic-code/generators-common/fill";
 import { q, mapColumnType } from "../sql-dialect.ts";
+import {
+  paramsTmpl,
+  updateBodyTmpl,
+} from "../../resources/procedures-shared.ts";
 import {
   pkFieldOf,
   writableNonAuditFields,
@@ -193,20 +198,17 @@ export function generateProceduresFor(
   );
 }
 
-/** The `SET <cols> WHERE <cond>` body lines shared by every dialect's update procedure — `setLines` is the dialect's aligned SET column list, `where` its dialect-specific predicate. */
-export function setAndWhere(setLines: string[], where: string): string[] {
-  return [
-    `  SET ${setLines.join("\n").replace(/^      /, "")}`,
-    `  WHERE ${where};`,
-  ];
-}
-
 /** Render aligned `IN`/`@`/bare procedure params — `prefix` is the dialect's param marker (`""` postgres, `"IN "` mysql, `"@"` sqlserver). */
 export function renderInParams(params: Param[], prefix = ""): string {
   const width = paramAlignWidth(params);
-  return params
-    .map((p) => `  ${prefix}${pad(p.name, width)} ${p.type}`)
-    .join(",\n");
+  return fill(paramsTmpl, {
+    params: params.map((p, i) => ({
+      prefix,
+      paddedName: pad(p.name, width),
+      type: p.type,
+      last: i === params.length - 1,
+    })),
+  }).trimEnd();
 }
 
 /** The char-column-family param type shared by mysql/sqlserver: bigint pk, the fixed uuid/audit string widths (`text` is `VARCHAR`/`NVARCHAR`), else the dialect's mapped column type. */
@@ -223,7 +225,7 @@ export function charParamType(
 }
 
 /** Resolve a by-field column, throwing the standard "not declared" error keyed by the procedure name. */
-export function requireField(
+function requireField(
   table: ProcTable,
   byField: string | undefined,
   procName: string,
@@ -259,7 +261,7 @@ export interface UpdateProcDialect {
   colRef(col: string): string;
   setLhs(col: string): string;
   argRef(col: string, procName: string): string;
-  wrap(ctx: RenderCtx, spec: UpdateSpec, updateLines: string[]): string;
+  wrap(ctx: RenderCtx, spec: UpdateSpec, updateBody: string): string;
 }
 
 /** Bind a dialect's update rendering into the `generateUpdate` op the `Dialect` interface requires: assemble the shared WHERE-variant predicate and the `SET col = arg` list, then hand them to the dialect's `wrap` for its proc skeleton. Each dialect module exports `makeGenerateUpdate(updateDialect)`, so the assembly stays the single copy. Direct assignment (no COALESCE) — PATCH-merge happens in the service/repository layer, and COALESCE in-proc made setting a nullable column to NULL impossible. */
@@ -274,18 +276,32 @@ export function makeGenerateUpdate(
         `${d.colRef(n)} = ${argOf(n)} AND ${d.colRef("updated")} = ${argOf("expected_updated")}`,
       plain: (n) => `${d.colRef(n)} = ${argOf(n)}`,
     });
-    const setLines = [
-      ...spec.writable.map(
-        (f) => `      ${d.setLhs(f.name)}    = ${argOf(f.name)},`,
-      ),
-      `      ${d.setLhs("updated")} = ${argOf("new_updated")}`,
+    const sets = [
+      ...spec.writable.map((f) => ({
+        lhs: d.setLhs(f.name),
+        padEq: "    = ",
+        rhs: argOf(f.name),
+      })),
+      {
+        lhs: d.setLhs("updated"),
+        padEq: " = ",
+        rhs: argOf("new_updated"),
+      },
     ];
-    return d.wrap(ctx, spec, setAndWhere(setLines, where));
+    const updateBody = fill(updateBodyTmpl, {
+      sets: sets.map((s, i) => ({
+        ...s,
+        first: i === 0,
+        last: i === sets.length - 1,
+      })),
+      where,
+    }).trimEnd();
+    return d.wrap(ctx, spec, updateBody);
   };
 }
 
 /** The dialect-independent shape of an update procedure — routine name, key column, writable columns, and the ordered param list — built from the render `ctx` and the dialect's `paramType`/`auditType`. Covers plain, optimistic-concurrency, and by-field variants; the SQL body + WHERE stay in the caller. */
-export function updateSpec(
+function updateSpec(
   dialect: Dialect,
   { entityName, table, idType }: RenderCtx,
   variant: Variant,
@@ -316,7 +332,7 @@ export function updateSpec(
 }
 
 /** The two params of an optimistic-concurrency delete: the pk and the `expected_updated` guard. */
-export function deleteOccParams(dialect: Dialect, pk: ProcField): Param[] {
+function deleteOccParams(dialect: Dialect, pk: ProcField): Param[] {
   return [
     { name: pk.name, type: dialect.paramType(pk) },
     { name: "expected_updated", type: dialect.auditType },

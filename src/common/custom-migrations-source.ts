@@ -4,13 +4,11 @@ import { SQL_DIALECTS, normalizeDialect } from "./sql-dialect.ts";
 
 const FILENAME_RE = /^(\d+)_([A-Za-z0-9][A-Za-z0-9_-]*)_(up|down)\.sql$/;
 
-export interface CustomMigrationPair {
+interface CustomMigrationPair {
   order: number;
   name: string;
   up: string;
   down: string;
-  upSourcePath: string;
-  downSourcePath: string;
 }
 
 interface Slot {
@@ -101,15 +99,13 @@ export async function readCustomMigrationPairs(
   );
   return Promise.all(
     ordered.map(async (slot) => {
-      const upSourcePath = join(dir, slot.up!);
-      const downSourcePath = join(dir, slot.down!);
+      const upPath = join(dir, slot.up!);
+      const downPath = join(dir, slot.down!);
       return {
         order: slot.order,
         name: slot.name,
-        up: await readFile(upSourcePath, "utf8"),
-        down: await readFile(downSourcePath, "utf8"),
-        upSourcePath,
-        downSourcePath,
+        up: await readFile(upPath, "utf8"),
+        down: await readFile(downPath, "utf8"),
       };
     }),
   );

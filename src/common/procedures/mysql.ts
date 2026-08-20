@@ -26,10 +26,10 @@ import {
   deleteOccTmpl,
 } from "../../resources/procedures-mysql.ts";
 
-export const dialectName = "mysql";
-export const auditType = "VARCHAR(64)";
+const dialectName = "mysql";
+const auditType = "VARCHAR(64)";
 
-export const paramType = (field: ProcField): string =>
+const paramType = (field: ProcField): string =>
   charParamType(field, "VARCHAR", dialectName);
 
 const renderParams = (params: Param[]): string =>
@@ -62,7 +62,7 @@ const createProcParams = (
   ];
 };
 
-export const generateCreate = ({
+const generateCreate = ({
   entityName,
   table,
   idType,
@@ -82,23 +82,19 @@ export const generateCreate = ({
         mysqlValueExpr("updated"),
       ]
     : cols.map((c) => mysqlValueExpr(c));
-  const selectAfterWrite =
-    pk.type === "biginteger" || pk.type === "integer"
-      ? `SELECT LAST_INSERT_ID() AS ${pk.name};`
-      : `SELECT t.${pk.name} AS ${pk.name} FROM ${tableTok} t WHERE t.uuid = uuid;`;
   return fill(createTmpl, {
     entityName,
     params: renderParams(createProcParams(table, idType)),
     generatedId,
+    lastInsertId: pk.type === "biginteger" || pk.type === "integer",
     tableTok,
     cols: cols.join(", "),
     vals: vals.join(", "),
     pkName: pk.name,
-    selectAfterWrite,
   }).trimEnd();
 };
 
-export const generateFindOne = ({
+const generateFindOne = ({
   entityName,
   table,
   idType,
@@ -113,7 +109,7 @@ export const generateFindOne = ({
     aliasedCols: aliasedColumns(table, idType),
   }).trimEnd();
 
-export const generateFindAll = ({
+const generateFindAll = ({
   entityName,
   table,
   idType,
@@ -127,7 +123,7 @@ export const generateFindAll = ({
     pkName: pk.name,
   }).trimEnd();
 
-export const generateFindBy = (
+const generateFindBy = (
   { entityName, table, idType, tableTok }: RenderCtx,
   field: ProcField,
 ): string =>
@@ -143,18 +139,18 @@ const updateDialect: UpdateProcDialect = {
   colRef: (c) => `t.${c}`,
   setLhs: (c) => `t.${c}`,
   argRef: (c) => mysqlValueExpr(c),
-  wrap: (ctx, { name, params }, updateLines) =>
+  wrap: (ctx, { name, params }, updateBody) =>
     fill(updateTmpl, {
       name,
       params: renderParams(params),
       tableTok: ctx.tableTok,
-      updateBody: updateLines.join("\n"),
+      updateBody,
     }).trimEnd(),
 };
 
-export const generateUpdate = makeGenerateUpdate(updateDialect);
+const generateUpdate = makeGenerateUpdate(updateDialect);
 
-export const generateDelete = ({
+const generateDelete = ({
   entityName,
   tableTok,
   pk,
@@ -166,7 +162,7 @@ export const generateDelete = ({
     tableTok,
   }).trimEnd();
 
-export const generateDeleteOcc = (
+const generateDeleteOcc = (
   { entityName, tableTok, pk }: RenderCtx,
   params: Param[],
 ): string =>

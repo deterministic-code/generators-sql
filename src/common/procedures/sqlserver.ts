@@ -25,10 +25,10 @@ import {
   deleteOccTmpl,
 } from "../../resources/procedures-sqlserver.ts";
 
-export const dialectName = "sqlserver";
-export const auditType = "NVARCHAR(64)";
+const dialectName = "sqlserver";
+const auditType = "NVARCHAR(64)";
 
-export const paramType = (field: ProcField): string =>
+const paramType = (field: ProcField): string =>
   charParamType(field, "NVARCHAR", dialectName);
 
 const allColumnNames = (
@@ -48,7 +48,7 @@ const allColumnNames = (
 const renderParams = (params: Param[]): string =>
   renderInParams(params, "@");
 
-export const generateCreate = ({
+const generateCreate = ({
   entityName,
   table,
   idType,
@@ -71,7 +71,7 @@ export const generateCreate = ({
   }).trimEnd();
 };
 
-export const generateFindOne = ({
+const generateFindOne = ({
   entityName,
   table,
   idType,
@@ -86,7 +86,7 @@ export const generateFindOne = ({
     tableTok,
   }).trimEnd();
 
-export const generateFindAll = ({
+const generateFindAll = ({
   entityName,
   table,
   idType,
@@ -100,7 +100,7 @@ export const generateFindAll = ({
     pkName: pk.name,
   }).trimEnd();
 
-export const generateFindBy = (
+const generateFindBy = (
   { entityName, table, idType, tableTok }: RenderCtx,
   field: ProcField,
 ): string =>
@@ -116,18 +116,18 @@ const updateDialect: UpdateProcDialect = {
   colRef: (c) => c,
   setLhs: (c) => c,
   argRef: (c) => `@${c}`,
-  wrap: (ctx, { name, params }, updateLines) =>
+  wrap: (ctx, { name, params }, updateBody) =>
     fill(updateTmpl, {
       name,
       params: renderParams(params),
       tableTok: ctx.tableTok,
-      updateBody: updateLines.join("\n"),
+      updateBody,
     }).trimEnd(),
 };
 
-export const generateUpdate = makeGenerateUpdate(updateDialect);
+const generateUpdate = makeGenerateUpdate(updateDialect);
 
-export const generateDelete = ({
+const generateDelete = ({
   entityName,
   tableTok,
   pk,
@@ -139,7 +139,7 @@ export const generateDelete = ({
     tableTok,
   }).trimEnd();
 
-export const generateDeleteOcc = (
+const generateDeleteOcc = (
   { entityName, tableTok, pk }: RenderCtx,
   params: Param[],
 ): string =>

@@ -22,14 +22,19 @@ const fromIdType = (
   ...extras,
 });
 
+/** On unless the flattened setting is the string `"false"`. */
+const enabledByDefault = (raw: string | undefined): boolean => raw !== "false";
+
 export const datasourceSettings = (settings: Record<string, string>) =>
   fromIdType(settings["datasource.id_type"] ?? "integer", {
-    pluralizeTableNames:
-      settings["datasource.pluralize_datatable_names"] === "true",
+    pluralizeTableNames: enabledByDefault(
+      settings["datasource.pluralize_datatable_names"],
+    ),
     useStoredProcedures:
       settings["datasource.use_stored_procedures"] === "true",
-    useOptimisticConcurrency:
-      settings["datasource.use_optimistic_concurrency"] === "true",
+    useOptimisticConcurrency: enabledByDefault(
+      settings["datasource.use_optimistic_concurrency"],
+    ),
   });
 
 export const datasourceSettingsFor = (opts: DatasourceOptions = {}) => {
@@ -37,7 +42,7 @@ export const datasourceSettingsFor = (opts: DatasourceOptions = {}) => {
   return fromIdType(idType, {
     pluralizeTableNames: true,
     useStoredProcedures: false,
-    useOptimisticConcurrency: false,
+    useOptimisticConcurrency: true,
     ...rest,
   });
 };

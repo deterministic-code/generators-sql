@@ -6,13 +6,7 @@ import type { GenerateEntry } from "@deterministic-code/generators-common/genera
 import { generateSqlFor } from "./common/generate-sql.ts";
 import { dialectsFromSettings } from "./common/sql-dialect.ts";
 
-export {
-  generateInitialMigration,
-  generateSqlFor,
-} from "./common/generate-sql.ts";
-export { buildCustomMigrationFiles } from "./common/generate-custom-migrations.ts";
-
-/** DDL + custom migrations for every configured SQL dialect. */
+/** DDL + custom migrations for each dialect in `backend.datasources`. */
 export const generate = async (arg: GenerateArg): Promise<GenerateEntry[]> => {
   const ctx = await contextFrom(arg);
   const entries: GenerateEntry[] = [];
