@@ -54,7 +54,6 @@ interface ProcSpec {
 export interface RenderCtx {
   entityName: string;
   table: ProcTable;
-  idType?: string;
   tableTok: string;
   pk: ProcField;
 }
@@ -88,7 +87,6 @@ interface ProcedureSpecOpts {
 interface GenerateProceduresOpts {
   byFields?: string[];
   useOptimisticConcurrency?: boolean;
-  idType?: string;
 }
 
 /** The ordered CRUD operations and their routine names for one entity — the single source both the per-dialect fan-out and `listProcedureNames` (down-migration DROPs) consume. */
@@ -171,7 +169,7 @@ function renderOp(dialect: Dialect, spec: ProcSpec, ctx: RenderCtx): string {
     case "deleteOcc":
       return dialect.generateDeleteOcc(
         ctx,
-        deleteOccParams(dialect, pkFieldOf(ctx.table, ctx.idType)),
+        deleteOccParams(dialect, pkFieldOf(ctx.table)),
       );
   }
 }
@@ -185,13 +183,11 @@ export function generateProceduresFor(
   const entityName = table.entityName;
   const byFields = opts.byFields ?? [];
   const occ = opts.useOptimisticConcurrency === true;
-  const idType = opts.idType;
   const ctx: RenderCtx = {
     entityName,
     table,
-    idType,
     tableTok: q(dialect.dialectName, table.name),
-    pk: pkFieldOf(table, idType),
+    pk: pkFieldOf(table),
   };
   return procedureSpecs(entityName, { byFields, occ }).map((spec) =>
     renderOp(dialect, spec, ctx),
@@ -290,15 +286,15 @@ export function makeGenerateUpdate(
 /** The dialect-independent shape of an update procedure — routine name, key column, writable columns, and the ordered param list — built from the render `ctx` and the dialect's `paramType`/`auditType`. Covers plain, optimistic-concurrency, and by-field variants; the SQL body + WHERE stay in the caller. */
 function updateSpec(
   dialect: Dialect,
-  { entityName, table, idType }: RenderCtx,
+  { entityName, table }: RenderCtx,
   variant: Variant,
 ): UpdateSpec {
   const { occ = false, byField } = variant;
-  const pk = pkFieldOf(table, idType);
+  const pk = pkFieldOf(table);
   const keyField = byField
     ? requireField(table, byField, `update_${entityName}_by_${byField}`)
     : pk;
-  const writable = writableNonAuditFields(table, idType).filter(
+  const writable = writableNonAuditFields(table).filter(
     (f: ProcField) => f.name !== byField,
   );
   const name = byField

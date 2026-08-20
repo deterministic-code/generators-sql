@@ -1,13 +1,11 @@
-import type { DatasourceType } from "@deterministic-code/generators-common/specification";
+import type { ExpandedDatasourceType } from "@deterministic-code/generators-common/specification";
 import { effectiveTableName } from "./effective-table-name.ts";
 import { requireDialect } from "./sql-dialect.ts";
 
 export type DatasourceOptions = {
-  idType?: string;
   pluralizeTableNames?: boolean;
   useStoredProcedures?: boolean;
   useOptimisticConcurrency?: boolean;
-  withUuidColumn?: boolean;
 };
 
 /** On unless the flattened setting is the string `"false"`. */
@@ -18,35 +16,25 @@ const enabledByDefault = (raw: string | undefined): boolean =>
 const enabledWhenTrue = (raw: string | undefined): boolean =>
   String(raw) === "true";
 
-export const datasourceSettings = (settings: Record<string, string>) => {
-  const idType = settings["datasource.id_type"] ?? "integer";
-  return {
-    idType,
-    withUuidColumn: idType !== "uuid",
-    pluralizeTableNames: enabledByDefault(
-      settings["datasource.pluralize_datatable_names"],
-    ),
-    useStoredProcedures: enabledWhenTrue(
-      settings["datasource.use_stored_procedures"],
-    ),
-    useOptimisticConcurrency: enabledByDefault(
-      settings["datasource.use_optimistic_concurrency"],
-    ),
-  };
-};
+export const datasourceSettings = (settings: Record<string, string>) => ({
+  pluralizeTableNames: enabledByDefault(
+    settings["datasource.pluralize_datatable_names"],
+  ),
+  useStoredProcedures: enabledWhenTrue(
+    settings["datasource.use_stored_procedures"],
+  ),
+  useOptimisticConcurrency: enabledByDefault(
+    settings["datasource.use_optimistic_concurrency"],
+  ),
+});
 
-export const datasourceSettingsFor = (opts: DatasourceOptions = {}) => {
-  const idType = opts.idType ?? "integer";
-  return {
-    idType,
-    withUuidColumn: idType !== "uuid",
-    pluralizeTableNames: opts.pluralizeTableNames ?? true,
-    useStoredProcedures: opts.useStoredProcedures ?? false,
-    useOptimisticConcurrency: opts.useOptimisticConcurrency ?? true,
-  };
-};
+export const datasourceSettingsFor = (opts: DatasourceOptions = {}) => ({
+  pluralizeTableNames: opts.pluralizeTableNames ?? true,
+  useStoredProcedures: opts.useStoredProcedures ?? false,
+  useOptimisticConcurrency: opts.useOptimisticConcurrency ?? true,
+});
 
-export type LiveTable = DatasourceType & { tableName: string };
+export type LiveTable = ExpandedDatasourceType & { tableName: string };
 
 export const hasAuditColumns = (table: { fields: { name: string }[] }): boolean =>
   table.fields.some((f) => f.name === "created") &&
@@ -93,7 +81,7 @@ const topoSort = (tables: LiveTable[]): LiveTable[] => {
 /** Shared by proc + migration generators — skipMigrations filter + topo-sort. */
 export const buildLiveTables = (
   language: string,
-  types: DatasourceType[],
+  types: ExpandedDatasourceType[],
   opts: DatasourceOptions = {},
 ): LiveTable[] => {
   requireDialect(language);

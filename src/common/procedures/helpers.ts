@@ -13,37 +13,17 @@ interface ProcTable {
   fields: ProcField[];
 }
 
-/** The implicit primary key for an entity that declares none, keyed off the resolved `id_type`. */
-function implicitIdField(idType: string | undefined): ProcField {
-  switch (idType) {
-    case "uuid":
-      return { name: "id", type: "uuid" };
-    case "string":
-      return { name: "id", type: "string", size: 64 };
-    case "integer":
-    case "biginteger":
-    case undefined:
-      return { name: "id", type: "biginteger" };
-    default:
-      throw new Error(`generate-procedures: unknown idType "${idType}"`);
-  }
-}
-
-/** The entity's primary key: an explicit `primary_key: true` field, else the implicit id column. */
-export function pkFieldOf(
-  table: ProcTable,
-  idType: string | undefined,
-): ProcField {
-  const custom = table.fields.find((f) => f.isPrimaryKey === true);
-  return custom ?? implicitIdField(idType);
+/** The entity's primary key: an explicit `primary_key: true` field, else `id`. */
+export function pkFieldOf(table: ProcTable): ProcField {
+  return (
+    table.fields.find((f) => f.isPrimaryKey === true) ??
+    table.fields.find((f) => f.name === "id") ?? { name: "id", type: "integer" }
+  );
 }
 
 /** The writable, non-audit columns: everything but the pk, the system `uuid`, and `created`/`updated`. */
-export function writableNonAuditFields(
-  table: ProcTable,
-  idType: string | undefined,
-): ProcField[] {
-  const pk = pkFieldOf(table, idType);
+export function writableNonAuditFields(table: ProcTable): ProcField[] {
+  const pk = pkFieldOf(table);
   return table.fields.filter(
     (f) =>
       f.name !== pk.name &&
@@ -53,33 +33,25 @@ export function writableNonAuditFields(
   );
 }
 
-// A uuid id_type makes the primary key itself the uuid, so procedures skip the separate system `uuid` column to match the table generator — else their INSERT/SELECT references a column that does not exist.
-export function hasSystemUuidColumn(idType: string | undefined): boolean {
-  return idType !== "uuid";
+export function hasSystemUuidColumn(table: ProcTable): boolean {
+  return table.fields.some((f) => f.name === "uuid");
 }
 
-/** The ordered column list for an entity's SELECT/INSERT: pk, the system `uuid` (unless the pk itself is the uuid), the writable columns, then `created`/`updated`. */
-function allColumnNames(
-  table: ProcTable,
-  idType: string | undefined,
-): string[] {
-  const pk = pkFieldOf(table, idType);
+/** The ordered column list for an entity's SELECT/INSERT: pk, the system `uuid` (when present), the writable columns, then `created`/`updated`. */
+function allColumnNames(table: ProcTable): string[] {
+  const pk = pkFieldOf(table);
   return [
     pk.name,
-    ...(hasSystemUuidColumn(idType) ? ["uuid"] : []),
-    ...writableNonAuditFields(table, idType).map((f) => f.name),
+    ...(hasSystemUuidColumn(table) ? ["uuid"] : []),
+    ...writableNonAuditFields(table).map((f) => f.name),
     "created",
     "updated",
   ];
 }
 
 /** `allColumnNames` qualified with a table alias (default `t`), for the dialects whose SELECTs alias the table. */
-export function aliasedColumns(
-  table: ProcTable,
-  idType: string | undefined,
-  alias = "t",
-): string {
-  return allColumnNames(table, idType)
+export function aliasedColumns(table: ProcTable, alias = "t"): string {
+  return allColumnNames(table)
     .map((c) => `${alias}.${c}`)
     .join(", ");
 }

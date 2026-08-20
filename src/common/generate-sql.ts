@@ -3,7 +3,7 @@ import { fill } from "@deterministic-code/generators-common/fill";
 import type {
   DatasourceField,
   DatasourceIndex,
-  DatasourceType,
+  ExpandedDatasourceType,
   SeedRow,
 } from "@deterministic-code/generators-common/specification";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
@@ -13,7 +13,6 @@ import { DATASOURCE_TYPES_YAML } from "@deterministic-code/generators-common/spe
 import {
   buildLiveTables,
   datasourceSettings,
-  datasourceSettingsFor,
   hasAuditColumns,
   type DatasourceOptions,
   type LiveTable,
@@ -152,24 +151,23 @@ const tableColumnLines = (
   table: LiveTable,
   opts: DatasourceOptions,
 ): string[] => {
-  const settings = datasourceSettingsFor(opts);
   const pluralize = opts.pluralizeTableNames === true;
   const physical = table.tableName;
   const pkName = constraintIdent(dialect, physical, "primary_key");
   const utcNow =
     dialectConverter(dialect).conversions.datetime.defaults.UtcNow("");
 
-  const timestampLine = (name: string): string => {
+  const timestampLine = (field: { name: string; type: string }): string => {
     const hasDefault = utcNow !== null;
     return columnLine({
-      quotedName: q(dialect, name),
-      nativeType: mapColumnType(dialect, { type: "datetime" }),
+      quotedName: q(dialect, field.name),
+      nativeType: mapColumnType(dialect, { type: field.type }),
       notNull: true,
       hasDefault,
       namedDefault: hasDefault && supportsNamedDefault(dialect),
       quotedDefaultName:
         hasDefault && supportsNamedDefault(dialect)
-          ? constraintIdent(dialect, physical, name, "default_constraint")
+          ? constraintIdent(dialect, physical, field.name, "default_constraint")
           : undefined,
       defaultExpr: utcNow ?? undefined,
     });
@@ -179,7 +177,6 @@ const tableColumnLines = (
   const extras: string[] = [];
   for (const f of table.fields) {
     if (f.name === "id" && f.isPrimaryKey === true) {
-      const idType = settings.idType;
       const idLine = fill(dialectSql[dialect].idColumn, {
         quotedName: q(dialect, "id"),
         quotedPkName: pkName,
@@ -189,10 +186,10 @@ const tableColumnLines = (
           "id",
           "default_constraint",
         ),
-        integer: idType === "integer",
-        biginteger: idType === "biginteger",
-        uuid: idType === "uuid",
-        string: idType === "string",
+        integer: f.type === "integer",
+        biginteger: f.type === "biginteger",
+        uuid: f.type === "uuid",
+        string: f.type === "string",
       }).trimEnd();
       if (idLine.length > 0) lines.push(idLine);
       continue;
@@ -213,7 +210,7 @@ const tableColumnLines = (
       continue;
     }
     if (f.name === "created" || f.name === "updated") {
-      lines.push(timestampLine(f.name));
+      lines.push(timestampLine(f));
       continue;
     }
     lines.push(columnDef(dialect, physical, f));
@@ -276,7 +273,7 @@ const flattenTable = (
 
 const generateInitialMigration = (
   language: string,
-  types: DatasourceType[],
+  types: ExpandedDatasourceType[],
   seedsByTable: Map<string, SeedRow[]>,
   opts: DatasourceOptions,
 ): { up: SqlFile; down: SqlFile } => {
@@ -285,7 +282,7 @@ const generateInitialMigration = (
     pluralizeTableNames: opts.pluralizeTableNames === true,
   });
   const preamble = renderPreamble(dialect);
-  const seeds = seedSections(dialect, live, seedsByTable, opts);
+  const seeds = seedSections(dialect, live, seedsByTable);
 
   return {
     up: {
@@ -337,7 +334,7 @@ const customEntries = async (
 const loadSchema = async (
   ctx: GenerateContext,
 ): Promise<{
-  types: DatasourceType[];
+  types: ExpandedDatasourceType[];
   seeds: Map<string, SeedRow[]>;
 }> => {
   await ctx.reader.read(DATASOURCE_TYPES_YAML);
@@ -358,8 +355,6 @@ export const generateSqlFor = async (
   const data = await loadSchema(ctx);
   const dir = ctx.settings["paths.deterministic"];
   const initial = generateInitialMigration(key, data.types, data.seeds, {
-    idType: ds.idType,
-    withUuidColumn: ds.withUuidColumn,
     pluralizeTableNames: ds.pluralizeTableNames,
     useOptimisticConcurrency: ds.useOptimisticConcurrency,
   });
