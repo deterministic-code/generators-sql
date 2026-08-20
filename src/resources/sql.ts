@@ -39,6 +39,7 @@ export const [
   insertSeedTmpl,
   columnTmpl,
   foreignKeyTmpl,
+  uniqueConstraintTmpl,
   migrationUpTmpl,
   migrationDownTmpl,
   dialectSql,
@@ -48,6 +49,7 @@ export const [
   resource("insert-seed.sql.tmpl"),
   resource("column.sql.tmpl"),
   resource("foreign-key.sql.tmpl"),
+  resource("unique-constraint.sql.tmpl"),
   resource("migration-up.sql.tmpl"),
   resource("migration-down.sql.tmpl"),
   Promise.all(

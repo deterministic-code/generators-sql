@@ -54,18 +54,34 @@ export const normalizeDialect = (
     : null;
 };
 
-/** Dialects listed in `datasource.dialects`, or every supported dialect. */
+const BACKEND_DATASOURCES = "backend.datasources";
+const LEGACY_DIALECTS = "datasource.dialects";
+
+/** Dialects listed in `backend.datasources`. `datasource.dialects` is rejected. */
 export const dialectsFromSettings = (
   settings: Record<string, string>,
 ): SqlDialect[] => {
-  const raw = settings["datasource.dialects"];
-  if (raw === undefined || raw === "") return [...SQL_DIALECTS];
+  const legacy = settings[LEGACY_DIALECTS];
+  if (legacy !== undefined) {
+    throw new Error(
+      `${LEGACY_DIALECTS} is not supported; set ${BACKEND_DATASOURCES} instead (got ${JSON.stringify(legacy)}).`,
+    );
+  }
+  const raw = settings[BACKEND_DATASOURCES];
+  if (raw === undefined || raw === "") return ["sqlite"];
   const out: SqlDialect[] = [];
   for (const item of raw.split(",")) {
-    const key = normalizeDialect(item.trim());
-    if (key !== null && !out.includes(key)) out.push(key);
+    const name = item.trim();
+    if (name === "") continue;
+    const key = normalizeDialect(name);
+    if (key === null) {
+      throw new Error(
+        `Unknown SQL dialect "${name}" in ${BACKEND_DATASOURCES}. Valid: ${SQL_DIALECTS.join(", ")}.`,
+      );
+    }
+    if (!out.includes(key)) out.push(key);
   }
-  return out.length > 0 ? out : [...SQL_DIALECTS];
+  return out.length > 0 ? out : ["sqlite"];
 };
 
 export const requireDialect = (language: string): SqlDialect => {

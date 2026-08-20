@@ -34,6 +34,7 @@ import {
   createTableTmpl,
   dialectSql,
   foreignKeyTmpl,
+  uniqueConstraintTmpl,
   migrationDownTmpl,
   migrationUpTmpl,
 } from "../resources/sql.ts";
@@ -48,39 +49,84 @@ const finalizeSql = (text: string): string => {
   return out.endsWith("\n") ? out : `${out}\n`;
 };
 
+const constraintIdent = (
+  dialect: SqlDialect,
+  table: string,
+  ...parts: string[]
+): string => q(dialect, [table, ...parts].join("_"));
+
+const supportsNamedDefault = (dialect: SqlDialect): boolean =>
+  dialect === "sqlserver";
+
 type ColumnTokens = {
   quotedName: string;
   nativeType: string;
   notNull?: boolean;
-  isUnique?: boolean;
   primaryKey?: boolean;
+  quotedPkName?: string;
   hasDefault?: boolean;
+  namedDefault?: boolean;
+  quotedDefaultName?: string;
   defaultExpr?: string;
 };
 
 const columnLine = (tokens: ColumnTokens): string =>
   fill(columnTmpl, tokens).trimEnd();
 
-const columnDef = (dialect: SqlDialect, field: NormalizedField): string => {
+const columnDef = (
+  dialect: SqlDialect,
+  tableName: string,
+  field: NormalizedField,
+): string => {
   let defaultExpr = sqlDefault(dialect, field);
   if (defaultExpr === null && field.name === "uuid") {
     defaultExpr =
       dialectConverter(dialect).conversions.uuid.defaults.NewId("") ?? null;
   }
   if (defaultExpr === "") defaultExpr = null;
+  const pk = field.primaryKey === true;
+  const hasDefault = defaultExpr !== null;
   return columnLine({
     quotedName: q(dialect, field.name),
     nativeType: mapColumnType(dialect, field),
     notNull: !field.isNullable,
-    isUnique: field.isUnique === true,
-    primaryKey: field.primaryKey === true,
-    hasDefault: defaultExpr !== null,
+    primaryKey: pk,
+    quotedPkName: pk
+      ? constraintIdent(dialect, tableName, "primary_key")
+      : undefined,
+    hasDefault,
+    namedDefault: hasDefault && supportsNamedDefault(dialect),
+    quotedDefaultName:
+      hasDefault && supportsNamedDefault(dialect)
+        ? constraintIdent(
+            dialect,
+            tableName,
+            field.name,
+            "default_constraint",
+          )
+        : undefined,
     defaultExpr: defaultExpr ?? undefined,
   });
 };
 
+const uniqueConstraint = (
+  dialect: SqlDialect,
+  tableName: string,
+  column: string,
+): string =>
+  fill(uniqueConstraintTmpl, {
+    quotedUniqueName: constraintIdent(
+      dialect,
+      tableName,
+      column,
+      "unique_constraint",
+    ),
+    quotedName: q(dialect, column),
+  }).trimEnd();
+
 const foreignKey = (
   dialect: SqlDialect,
+  tableName: string,
   field: NormalizedField,
   pluralize: boolean,
   mappings?: Map<string, string>,
@@ -89,6 +135,12 @@ const foreignKey = (
   const ref =
     mappings?.get(refTable) ?? effectiveTableName(refTable, pluralize);
   return fill(foreignKeyTmpl, {
+    quotedFkName: constraintIdent(
+      dialect,
+      tableName,
+      field.name,
+      "foreign_key",
+    ),
     quotedName: q(dialect, field.name),
     quotedRefTable: q(dialect, ref),
     quotedRefCol: q(dialect, refCol),
@@ -112,10 +164,18 @@ const tableColumnLines = (
   const pluralize = table.pluralizeTableNames === true;
 
   const lines: string[] = [];
+  const pkName = constraintIdent(dialect, table.name, "primary_key");
   if (!table.fields.some((f) => f.primaryKey)) {
     const idType = settings.idType;
     const idLine = fill(dialectSql[dialect].idColumn, {
       quotedName: q(dialect, "id"),
+      quotedPkName: pkName,
+      quotedDefaultName: constraintIdent(
+        dialect,
+        table.name,
+        "id",
+        "default_constraint",
+      ),
       integer: idType === "integer",
       biginteger: idType === "biginteger",
       uuid: idType === "uuid",
@@ -127,30 +187,57 @@ const tableColumnLines = (
     lines.push(
       fill(dialectSql[dialect].uuidColumn, {
         quotedName: q(dialect, "uuid"),
+        quotedDefaultName: constraintIdent(
+          dialect,
+          table.name,
+          "uuid",
+          "default_constraint",
+        ),
       }).trimEnd(),
     );
   }
-  const fks: string[] = [];
+  const extras: string[] = [];
+  if (withUuid) {
+    extras.push(uniqueConstraint(dialect, table.name, "uuid"));
+  }
   for (const f of table.fields) {
-    lines.push(columnDef(dialect, f));
+    lines.push(columnDef(dialect, table.name, f));
+    if (f.isUnique === true) {
+      extras.push(uniqueConstraint(dialect, table.name, f.name));
+    }
     if (f.references && !skipFk) {
-      fks.push(foreignKey(dialect, f, pluralize, opts.tableNameMappings));
+      extras.push(
+        foreignKey(
+          dialect,
+          table.name,
+          f,
+          pluralize,
+          opts.tableNameMappings,
+        ),
+      );
     }
   }
   if (withAudit) {
     const utcNow =
       dialectConverter(dialect).conversions.datetime.defaults.UtcNow("");
-    const ts = (name: string) =>
-      columnLine({
+    const ts = (name: string) => {
+      const hasDefault = utcNow !== null;
+      return columnLine({
         quotedName: q(dialect, name),
         nativeType: mapColumnType(dialect, { type: "datetime" }),
         notNull: true,
-        hasDefault: utcNow !== null,
+        hasDefault,
+        namedDefault: hasDefault && supportsNamedDefault(dialect),
+        quotedDefaultName:
+          hasDefault && supportsNamedDefault(dialect)
+            ? constraintIdent(dialect, table.name, name, "default_constraint")
+            : undefined,
         defaultExpr: utcNow ?? undefined,
       });
+    };
     lines.push(ts("created"), ts("updated"));
   }
-  return [...lines, ...fks];
+  return [...lines, ...extras];
 };
 
 const createTableSql = (
@@ -175,7 +262,7 @@ const createIndexSql = (
 ): string =>
   fill(createIndexTmpl, {
     isUnique: idx.isUnique,
-    quotedName: q(dialect, idx.name),
+    quotedName: constraintIdent(dialect, tableName, idx.name, "index"),
     quotedTable: q(dialect, tableName),
     quotedCols: idx.fields.map((c) => q(dialect, c)).join(", "),
   }).trimEnd();
