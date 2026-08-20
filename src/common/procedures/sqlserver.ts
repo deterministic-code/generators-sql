@@ -3,6 +3,7 @@ import { mapColumnType } from "../sql-dialect.ts";
 import {
   pkFieldOf,
   writableNonAuditFields,
+  hasSystemUuidColumn,
   pluralizeEntity,
 } from "./helpers.ts";
 import {
@@ -32,15 +33,12 @@ const auditType = native("datetime");
 const paramType = (field: ProcField): string =>
   mapColumnType(dialectName, field);
 
-const allColumnNames = (
-  table: ProcTable,
-  idType: string | undefined,
-): string[] => {
-  const pk = pkFieldOf(table, idType);
+const allColumnNames = (table: ProcTable): string[] => {
+  const pk = pkFieldOf(table);
   return [
     pk.name,
-    "uuid",
-    ...writableNonAuditFields(table, idType).map((f) => f.name),
+    ...(hasSystemUuidColumn(table) ? ["uuid"] : []),
+    ...writableNonAuditFields(table).map((f) => f.name),
     "created",
     "updated",
   ];
@@ -52,17 +50,17 @@ const renderParams = (params: Param[]): string =>
 const generateCreate = ({
   entityName,
   table,
-  idType,
   tableTok,
 }: RenderCtx): string => {
-  const writable = writableNonAuditFields(table, idType);
+  const writable = writableNonAuditFields(table);
+  const uuidCols = hasSystemUuidColumn(table) ? ["uuid"] : [];
   const params: Param[] = [
-    { name: "uuid", type: native("uuid") },
+    ...uuidCols.map((name) => ({ name, type: native("uuid") })),
     ...writable.map((f) => ({ name: f.name, type: paramType(f) })),
     { name: "created", type: auditType },
     { name: "updated", type: auditType },
   ];
-  const cols = ["uuid", ...writable.map((f) => f.name), "created", "updated"];
+  const cols = [...uuidCols, ...writable.map((f) => f.name), "created", "updated"];
   return fill(createTmpl, {
     entityName,
     params: renderParams(params),
@@ -75,7 +73,6 @@ const generateCreate = ({
 const generateFindOne = ({
   entityName,
   table,
-  idType,
   tableTok,
   pk,
 }: RenderCtx): string =>
@@ -83,33 +80,32 @@ const generateFindOne = ({
     entityName,
     pkName: pk.name,
     pkType: paramType(pk),
-    cols: allColumnNames(table, idType).join(", "),
+    cols: allColumnNames(table).join(", "),
     tableTok,
   }).trimEnd();
 
 const generateFindAll = ({
   entityName,
   table,
-  idType,
   tableTok,
   pk,
 }: RenderCtx): string =>
   fill(findAllTmpl, {
     plural: pluralizeEntity(entityName),
-    cols: allColumnNames(table, idType).join(", "),
+    cols: allColumnNames(table).join(", "),
     tableTok,
     pkName: pk.name,
   }).trimEnd();
 
 const generateFindBy = (
-  { entityName, table, idType, tableTok }: RenderCtx,
+  { entityName, table, tableTok }: RenderCtx,
   field: ProcField,
 ): string =>
   fill(findByTmpl, {
     entityName,
     byField: field.name,
     fieldType: paramType(field),
-    cols: allColumnNames(table, idType).join(", "),
+    cols: allColumnNames(table).join(", "),
     tableTok,
   }).trimEnd();
 

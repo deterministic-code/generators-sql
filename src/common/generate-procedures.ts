@@ -82,7 +82,6 @@ export const generateProceduresForDialect = async (
         ...generateProceduresFor(pack.dialect, table, {
           byFields: fields,
           useOptimisticConcurrency: occ,
-          idType: ds.idType,
         }),
       ].join("\n\n"),
       drops: procedureSpecs(t.name, { byFields: fields, occ }).map((spec) =>

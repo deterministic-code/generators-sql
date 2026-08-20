@@ -35,13 +35,12 @@ const paramType = (field: ProcField): string =>
 const generateCreate = ({
   entityName,
   table,
-  idType,
   tableTok,
   pk,
 }: RenderCtx): string => {
-  const writable = writableNonAuditFields(table, idType);
+  const writable = writableNonAuditFields(table);
   const pkType = paramType(pk);
-  const uuidParam: Param[] = hasSystemUuidColumn(idType)
+  const uuidParam: Param[] = hasSystemUuidColumn(table)
     ? [{ name: "uuid", type: native("uuid") }]
     : [];
   const params: Param[] = [
@@ -51,7 +50,7 @@ const generateCreate = ({
     { name: "updated", type: auditType },
   ];
   const cols = [
-    ...(hasSystemUuidColumn(idType) ? ["uuid"] : []),
+    ...(hasSystemUuidColumn(table) ? ["uuid"] : []),
     ...writable.map((f) => f.name),
     "created",
     "updated",
@@ -69,7 +68,6 @@ const generateCreate = ({
 const generateFindOne = ({
   entityName,
   table,
-  idType,
   tableTok,
   pk,
 }: RenderCtx): string =>
@@ -78,25 +76,24 @@ const generateFindOne = ({
     pkName: pk.name,
     pkType: paramType(pk),
     tableTok,
-    aliasedCols: aliasedColumns(table, idType),
+    aliasedCols: aliasedColumns(table),
   }).trimEnd();
 
 const generateFindAll = ({
   entityName,
   table,
-  idType,
   tableTok,
   pk,
 }: RenderCtx): string =>
   fill(findAllTmpl, {
     plural: pluralizeEntity(entityName),
     tableTok,
-    aliasedCols: aliasedColumns(table, idType),
+    aliasedCols: aliasedColumns(table),
     pkName: pk.name,
   }).trimEnd();
 
 const generateFindBy = (
-  { entityName, table, idType, tableTok }: RenderCtx,
+  { entityName, table, tableTok }: RenderCtx,
   field: ProcField,
 ): string =>
   fill(findByTmpl, {
@@ -104,7 +101,7 @@ const generateFindBy = (
     byField: field.name,
     fieldType: paramType(field),
     tableTok,
-    aliasedCols: aliasedColumns(table, idType),
+    aliasedCols: aliasedColumns(table),
   }).trimEnd();
 
 const updateDialect: UpdateProcDialect = {

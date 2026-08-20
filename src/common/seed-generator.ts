@@ -8,8 +8,6 @@ import type {
 } from "@deterministic-code/generators-common/specification";
 import { dialectConverter, q, sqlDefault, type SqlDialect } from "./sql-dialect.ts";
 import {
-  datasourceSettingsFor,
-  type DatasourceOptions,
   type LiveTable,
 } from "./sql-schema.ts";
 import {
@@ -70,18 +68,18 @@ const seedUuid = (tableName: string, id: number): string => {
 /** INSERT seed rows (and sequenced-id wraps) for one dialect. */
 class SeedGenerator {
   readonly dialect: SqlDialect;
-  readonly idType: string;
 
-  constructor(dialect: SqlDialect, opts: DatasourceOptions = {}) {
-    const settings = datasourceSettingsFor(opts);
+  constructor(dialect: SqlDialect) {
     this.dialect = dialect;
-    this.idType = settings.idType;
   }
 
   generate(table: LiveTable, seeds: SeedRow[]): string[] {
     if (seeds.length === 0) return [];
     const out: string[] = [];
-    const sequenced = this.idType !== "uuid" && this.idType !== "string";
+    const pkType =
+      table.fields.find((f) => f.name === table.primaryKeyColumn)?.type ??
+      "integer";
+    const sequenced = pkType !== "uuid" && pkType !== "string";
     const quoted = q(this.dialect, table.tableName);
 
     if (sequenced) {
@@ -106,7 +104,7 @@ class SeedGenerator {
     const { id, row } = seed;
     const { cols, fieldByName } = this.colsForRow(table, row);
     const values = cols.map((c) => {
-      if (c === "id") return this.idValue(table.name, id);
+      if (c === "id") return this.idValue(table, table.name, id);
       if (c === "uuid") return sqlStringLiteral(seedUuid(table.name, id));
       return this.colValue(fieldByName.get(c), { row, col: c });
     });
@@ -157,8 +155,11 @@ class SeedGenerator {
     return render ? render(this.dialect, value) : sqlStringLiteral(value);
   }
 
-  private idValue(source: string, id: number): string {
-    const render = SEED_ID[this.idType];
+  private idValue(table: LiveTable, source: string, id: number): string {
+    const pkType =
+      table.fields.find((f) => f.name === table.primaryKeyColumn)?.type ??
+      "integer";
+    const render = SEED_ID[pkType];
     return render ? render(source, id) : String(id);
   }
 }
@@ -168,9 +169,8 @@ export const seedSections = (
   dialect: SqlDialect,
   tables: LiveTable[],
   seeds: Map<string, SeedRow[]>,
-  seedOpts: DatasourceOptions,
 ): string[] => {
-  const gen = new SeedGenerator(dialect, seedOpts);
+  const gen = new SeedGenerator(dialect);
   const lines: string[] = [];
   for (const t of tables) {
     const sql = gen.generate(t, seeds.get(t.name) ?? []);

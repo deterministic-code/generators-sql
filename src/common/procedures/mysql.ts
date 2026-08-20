@@ -36,13 +36,10 @@ const paramType = (field: ProcField): string =>
 const renderParams = (params: Param[]): string =>
   renderInParams(params, "IN ");
 
-const createProcParams = (
-  table: ProcTable,
-  idType: string | undefined,
-): Param[] => {
-  const writable = writableNonAuditFields(table, idType);
+const createProcParams = (table: ProcTable): Param[] => {
+  const writable = writableNonAuditFields(table);
   return [
-    ...(hasSystemUuidColumn(idType)
+    ...(hasSystemUuidColumn(table)
       ? [{ name: "uuid", type: native("uuid") }]
       : []),
     ...writable.map((f) => ({ name: f.name, type: paramType(f) })),
@@ -54,12 +51,11 @@ const createProcParams = (
 const generateCreate = ({
   entityName,
   table,
-  idType,
   tableTok,
   pk,
 }: RenderCtx): string => {
-  const generatedId = !hasSystemUuidColumn(idType);
-  const writable = writableNonAuditFields(table, idType);
+  const generatedId = !hasSystemUuidColumn(table);
+  const writable = writableNonAuditFields(table);
   const cols = generatedId
     ? [pk.name, ...writable.map((f) => f.name), "created", "updated"]
     : ["uuid", ...writable.map((f) => f.name), "created", "updated"];
@@ -73,7 +69,7 @@ const generateCreate = ({
     : cols;
   return fill(createTmpl, {
     entityName,
-    params: renderParams(createProcParams(table, idType)),
+    params: renderParams(createProcParams(table)),
     generatedId,
     lastInsertId: pk.type === "biginteger" || pk.type === "integer",
     tableTok,
@@ -86,7 +82,6 @@ const generateCreate = ({
 const generateFindOne = ({
   entityName,
   table,
-  idType,
   tableTok,
   pk,
 }: RenderCtx): string =>
@@ -95,25 +90,24 @@ const generateFindOne = ({
     pkName: pk.name,
     pkType: paramType(pk),
     tableTok,
-    aliasedCols: aliasedColumns(table, idType),
+    aliasedCols: aliasedColumns(table),
   }).trimEnd();
 
 const generateFindAll = ({
   entityName,
   table,
-  idType,
   tableTok,
   pk,
 }: RenderCtx): string =>
   fill(findAllTmpl, {
     plural: pluralizeEntity(entityName),
     tableTok,
-    aliasedCols: aliasedColumns(table, idType),
+    aliasedCols: aliasedColumns(table),
     pkName: pk.name,
   }).trimEnd();
 
 const generateFindBy = (
-  { entityName, table, idType, tableTok }: RenderCtx,
+  { entityName, table, tableTok }: RenderCtx,
   field: ProcField,
 ): string =>
   fill(findByTmpl, {
@@ -121,7 +115,7 @@ const generateFindBy = (
     byField: field.name,
     fieldType: paramType(field),
     tableTok,
-    aliasedCols: aliasedColumns(table, idType),
+    aliasedCols: aliasedColumns(table),
   }).trimEnd();
 
 const updateDialect: UpdateProcDialect = {
