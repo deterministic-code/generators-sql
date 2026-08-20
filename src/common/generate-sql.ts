@@ -1,20 +1,20 @@
 import { effectiveTableName } from "./effective-table-name.ts";
 import { fill } from "@deterministic-code/generators-common/fill";
-import type { GenerateContext } from "./generate-context.ts";
+import type {
+  DatasourceField,
+  DatasourceIndex,
+  DatasourceType,
+  SeedRow,
+} from "@deterministic-code/generators-common/specification";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { chainMigrationEntries } from "./migration-entries.ts";
-import { parseDatasourceTypes } from "../parse-datasource-types.ts";
+import { SpecificationParser } from "@deterministic-code/generators-common/specification-parser";
 import {
   buildLiveTables,
-  buildTableNameMappings,
   datasourceSettings,
   datasourceSettingsFor,
-  tableHasAuditColumns,
-  type GenerateTableOptions,
-  type NormalizedField,
-  type NormalizedIndex,
-  type NormalizedTable,
-  type SchemaData,
+  type DatasourceOptions,
+  type LiveTable,
   type SqlFile,
 } from "./sql-schema.ts";
 import {
@@ -26,7 +26,7 @@ import {
   type SqlDialect,
 } from "./sql-dialect.ts";
 import { buildCustomMigrationFiles } from "./generate-custom-migrations.ts";
-import { assertSkipMigrationsCovered } from "./validate-skip-migrations-coverage.ts";
+import { generateProceduresForDialect } from "./generate-procedures.ts";
 import { seedSections } from "./seed-generator.ts";
 import {
   columnTmpl,
@@ -43,6 +43,16 @@ import {
   renderPreamble,
   renderUpdatedTrigger,
 } from "./render-ddl.ts";
+
+const hasAuditColumns = (table: LiveTable, occ = false): boolean => {
+  if (table.datasourceType === "readonly-lookup") return false;
+  const hasCustomPk = table.fields.some(
+    (f) => f.isPrimaryKey && f.name !== "id",
+  );
+  if (!hasCustomPk) return true;
+  if (table.datasourceType === "many-to-many") return false;
+  return table.optimisticConcurrency ?? occ;
+};
 
 const finalizeSql = (text: string): string => {
   const out = text.replace(/\n{3,}/g, "\n\n");
@@ -76,7 +86,7 @@ const columnLine = (tokens: ColumnTokens): string =>
 const columnDef = (
   dialect: SqlDialect,
   tableName: string,
-  field: NormalizedField,
+  field: DatasourceField,
 ): string => {
   let defaultExpr = sqlDefault(dialect, field);
   if (defaultExpr === null && field.name === "uuid") {
@@ -84,7 +94,7 @@ const columnDef = (
       dialectConverter(dialect).conversions.uuid.defaults.NewId("") ?? null;
   }
   if (defaultExpr === "") defaultExpr = null;
-  const pk = field.primaryKey === true;
+  const pk = field.isPrimaryKey === true;
   const hasDefault = defaultExpr !== null;
   return columnLine({
     quotedName: q(dialect, field.name),
@@ -127,13 +137,11 @@ const uniqueConstraint = (
 const foreignKey = (
   dialect: SqlDialect,
   tableName: string,
-  field: NormalizedField,
+  field: DatasourceField,
   pluralize: boolean,
-  mappings?: Map<string, string>,
 ): string => {
   const [refTable, refCol] = String(field.references).split(".");
-  const ref =
-    mappings?.get(refTable) ?? effectiveTableName(refTable, pluralize);
+  const ref = effectiveTableName(refTable, pluralize);
   return fill(foreignKeyTmpl, {
     quotedFkName: constraintIdent(
       dialect,
@@ -149,30 +157,31 @@ const foreignKey = (
 
 const tableColumnLines = (
   dialect: SqlDialect,
-  table: NormalizedTable,
-  opts: GenerateTableOptions,
+  table: LiveTable,
+  opts: DatasourceOptions,
 ): string[] => {
   const settings = datasourceSettingsFor(opts);
-  const withAudit = tableHasAuditColumns(table, {
-    useOptimisticConcurrency: opts.useOptimisticConcurrency === true,
-  });
+  const withAudit = hasAuditColumns(
+    table,
+    opts.useOptimisticConcurrency === true,
+  );
   const withUuid =
     (opts.withUuidColumn ?? settings.withUuidColumn) &&
     withAudit &&
     !table.fields.some((f) => f.name === "uuid");
-  const skipFk = opts.skipForeignKeys === true;
-  const pluralize = table.pluralizeTableNames === true;
+  const pluralize = opts.pluralizeTableNames === true;
+  const physical = table.tableName;
 
   const lines: string[] = [];
-  const pkName = constraintIdent(dialect, table.name, "primary_key");
-  if (!table.fields.some((f) => f.primaryKey)) {
+  const pkName = constraintIdent(dialect, physical, "primary_key");
+  if (!table.fields.some((f) => f.isPrimaryKey)) {
     const idType = settings.idType;
     const idLine = fill(dialectSql[dialect].idColumn, {
       quotedName: q(dialect, "id"),
       quotedPkName: pkName,
       quotedDefaultName: constraintIdent(
         dialect,
-        table.name,
+        physical,
         "id",
         "default_constraint",
       ),
@@ -189,7 +198,7 @@ const tableColumnLines = (
         quotedName: q(dialect, "uuid"),
         quotedDefaultName: constraintIdent(
           dialect,
-          table.name,
+          physical,
           "uuid",
           "default_constraint",
         ),
@@ -198,23 +207,15 @@ const tableColumnLines = (
   }
   const extras: string[] = [];
   if (withUuid) {
-    extras.push(uniqueConstraint(dialect, table.name, "uuid"));
+    extras.push(uniqueConstraint(dialect, physical, "uuid"));
   }
   for (const f of table.fields) {
-    lines.push(columnDef(dialect, table.name, f));
+    lines.push(columnDef(dialect, physical, f));
     if (f.isUnique === true) {
-      extras.push(uniqueConstraint(dialect, table.name, f.name));
+      extras.push(uniqueConstraint(dialect, physical, f.name));
     }
-    if (f.references && !skipFk) {
-      extras.push(
-        foreignKey(
-          dialect,
-          table.name,
-          f,
-          pluralize,
-          opts.tableNameMappings,
-        ),
-      );
+    if (f.references) {
+      extras.push(foreignKey(dialect, physical, f, pluralize));
     }
   }
   if (withAudit) {
@@ -230,7 +231,7 @@ const tableColumnLines = (
         namedDefault: hasDefault && supportsNamedDefault(dialect),
         quotedDefaultName:
           hasDefault && supportsNamedDefault(dialect)
-            ? constraintIdent(dialect, table.name, name, "default_constraint")
+            ? constraintIdent(dialect, physical, name, "default_constraint")
             : undefined,
         defaultExpr: utcNow ?? undefined,
       });
@@ -242,12 +243,12 @@ const tableColumnLines = (
 
 const createTableSql = (
   dialect: SqlDialect,
-  table: NormalizedTable,
-  opts: GenerateTableOptions,
+  table: LiveTable,
+  opts: DatasourceOptions,
 ): string => {
   const lines = tableColumnLines(dialect, table, opts);
   return fill(createTableTmpl, {
-    quotedName: q(dialect, table.name),
+    quotedName: q(dialect, table.tableName),
     columns: lines.map((line, i) => ({
       line,
       last: i === lines.length - 1,
@@ -258,7 +259,7 @@ const createTableSql = (
 const createIndexSql = (
   dialect: SqlDialect,
   tableName: string,
-  idx: NormalizedIndex,
+  idx: DatasourceIndex,
 ): string =>
   fill(createIndexTmpl, {
     isUnique: idx.isUnique,
@@ -269,43 +270,36 @@ const createIndexSql = (
 
 const flattenTable = (
   dialect: SqlDialect,
-  table: NormalizedTable,
-  opts: GenerateTableOptions,
+  table: LiveTable,
+  opts: DatasourceOptions,
 ) => {
   const indexes = table.indexes.map((idx) =>
-    createIndexSql(dialect, table.name, idx),
+    createIndexSql(dialect, table.tableName, idx),
   );
   return {
     createTable: createTableSql(dialect, table, opts),
     indexesBlock: indexes.join("\n"),
-    trigger: tableHasAuditColumns(table)
-      ? renderUpdatedTrigger(dialect, table)
+    trigger: hasAuditColumns(table, opts.useOptimisticConcurrency === true)
+      ? renderUpdatedTrigger(dialect, {
+          name: table.tableName,
+          fields: table.fields,
+        })
       : "",
   };
 };
 
 const generateInitialMigration = (
   language: string,
-  data: SchemaData,
-  opts: GenerateTableOptions = {},
+  types: DatasourceType[],
+  seedsByTable: Map<string, SeedRow[]>,
+  opts: DatasourceOptions,
 ): { up: SqlFile; down: SqlFile } => {
   const dialect = requireDialect(language);
-  const settings = datasourceSettingsFor(opts);
-  const withUuidColumn = opts.withUuidColumn ?? settings.withUuidColumn;
-  const live = buildLiveTables(language, data, {
+  const live = buildLiveTables(language, types, {
     pluralizeTableNames: opts.pluralizeTableNames === true,
-    idType: settings.idType,
   });
-  const createOpts: GenerateTableOptions = {
-    idType: settings.idType,
-    withUuidColumn,
-    tableNameMappings: buildTableNameMappings(data),
-  };
   const preamble = renderPreamble(dialect);
-  const seeds = seedSections(dialect, live, {
-    idType: settings.idType,
-    withUuidColumn,
-  });
+  const seeds = seedSections(dialect, live, seedsByTable, opts);
 
   return {
     up: {
@@ -314,7 +308,7 @@ const generateInitialMigration = (
         fill(migrationUpTmpl, {
           dialect,
           preamble: preamble ? `${preamble}\n` : "",
-          tables: live.map((t) => flattenTable(dialect, t, createOpts)),
+          tables: live.map((t) => flattenTable(dialect, t, opts)),
           hasSeeds: seeds.length > 0,
           seedBlocks: seeds,
         }),
@@ -327,7 +321,7 @@ const generateInitialMigration = (
           dialect,
           dropStatements: [...live]
             .reverse()
-            .map((t) => renderDropTable(dialect, t.name)),
+            .map((t) => renderDropTable(dialect, t.tableName)),
         }),
       ),
     },
@@ -354,45 +348,39 @@ const customEntries = async (
   );
 };
 
-const loadSchema = async (ctx: GenerateContext): Promise<SchemaData> => {
-  const yaml = await ctx.reader.read("datasource_types.yaml");
-  const seeds = (await ctx.reader.exists("datasource_seeds.yaml"))
-    ? await ctx.reader.read("datasource_seeds.yaml")
-    : null;
-  return parseDatasourceTypes(
-    yaml,
-    ctx.settings,
-    seeds,
-  ) as unknown as SchemaData;
+const loadSchema = async (
+  ctx: GenerateContext,
+  idType: string,
+): Promise<{
+  types: DatasourceType[];
+  seeds: Map<string, SeedRow[]>;
+}> => {
+  const parser = new SpecificationParser(ctx.reader);
+  return {
+    types: await parser.loadDatasourceTypes(idType),
+    seeds: await parser.loadDatasourceSeeds(),
+  };
 };
 
-/** DDL initial migration (+ optional custom migrations) for one SQL dialect. */
+/** DDL initial migration (+ optional custom migrations and stored procedures) for one SQL dialect. */
 export const generateSqlFor = async (
   dialect: SqlDialect,
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   const key = requireDialect(dialect);
-  const data = await loadSchema(ctx);
   const ds = datasourceSettings(ctx.settings);
+  const data = await loadSchema(ctx, ds.idType);
   const dir = ctx.settings["paths.deterministic"];
-  if (dir) {
-    await assertSkipMigrationsCovered({
-      data,
-      deterministicDir: dir,
-      dialects: [key],
-      useOptimisticConcurrency: ds.useOptimisticConcurrency,
-    });
-  }
+  const initial = generateInitialMigration(key, data.types, data.seeds, {
+    idType: ds.idType,
+    withUuidColumn: ds.withUuidColumn,
+    pluralizeTableNames: ds.pluralizeTableNames,
+    useOptimisticConcurrency: ds.useOptimisticConcurrency,
+  });
   return [
-    ...chainMigrationEntries(
-      key,
-      generateInitialMigration(key, data, {
-        idType: ds.idType,
-        withUuidColumn: ds.withUuidColumn,
-        pluralizeTableNames: ds.pluralizeTableNames,
-        useOptimisticConcurrency: ds.useOptimisticConcurrency,
-      }),
-    ),
+    content(`${key}/migrations/${initial.up.path}`, initial.up.content),
+    content(`${key}/migrations/${initial.down.path}`, initial.down.content),
     ...(await customEntries(key, dir)),
+    ...(await generateProceduresForDialect(dialect, ctx)),
   ];
 };

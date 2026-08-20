@@ -1,22 +1,13 @@
 import { fill } from "@deterministic-code/generators-common/fill";
-import type { GenerateContext } from "./generate-context.ts";
-import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { chainMigrationEntries } from "./migration-entries.ts";
-import { parseDatasourceTypes } from "../parse-datasource-types.ts";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
+import { SpecificationParser } from "@deterministic-code/generators-common/specification-parser";
 import { byFieldsFromDatasource } from "./datasource-by-fields.ts";
-import {
-  normalizeDialect,
-  supportsProcedures,
-  type SqlDialect,
-} from "./sql-dialect.ts";
+import type { SqlDialect } from "./sql-dialect.ts";
 import {
   buildLiveTables,
   datasourceSettings,
-  tableHasAuditColumns,
-  type GenerateTableOptions,
-  type NormalizedTable,
-  type SchemaData,
-  type SqlFile,
+  type LiveTable,
 } from "./sql-schema.ts";
 import {
   procedureSpecs,
@@ -40,178 +31,85 @@ import {
   migrationDownTmpl as ssDown,
 } from "../resources/procedures-sqlserver.ts";
 
-const DATASOURCE_TYPES_YAML = "datasource_types.yaml";
-const DATASOURCE_SEEDS_YAML = "datasource_seeds.yaml";
-
-const DIALECT_MODULES: Partial<Record<SqlDialect, Dialect>> = {
-  postgres,
-  mysql,
-  sqlserver,
-};
-
-const ROUTINE_KIND: Partial<
-  Record<SqlDialect, "function" | "procedure">
-> = {
-  postgres: "function",
-  mysql: "procedure",
-  sqlserver: "procedure",
-};
-
-const MIGRATION_TMPLS: Partial<
-  Record<SqlDialect, { up: string; down: string }>
-> = {
-  postgres: { up: pgUp, down: pgDown },
-  mysql: { up: myUp, down: myDown },
-  sqlserver: { up: ssUp, down: ssDown },
-};
-
-type ProcedureFileOpts = {
-  useOptimisticConcurrency?: boolean;
-  idType?: string;
-};
-
-type GenerateProcedureFileArgs = {
-  dialect: SqlDialect;
-  tables: NormalizedTable[];
-  byFieldsByEntity: Map<string, string[]>;
-  opts?: ProcedureFileOpts;
-};
-
-type RoutineName = {
+type Pack = {
+  dialect: Dialect;
   kind: "function" | "procedure";
-  name: string;
+  up: string;
+  down: string;
 };
 
-const generateProcedureFile = ({
-  dialect,
-  tables,
-  byFieldsByEntity,
-  opts,
-}: GenerateProcedureFileArgs): string => {
-  const mod = DIALECT_MODULES[dialect];
-  if (!mod) return "";
-  const occ = opts?.useOptimisticConcurrency === true;
-  for (const t of tables) {
-    if (!tableHasAuditColumns(t, { useOptimisticConcurrency: occ })) {
-      throw new Error(
-        `cannot generate procs for ${t.entityName}: requires audit columns`,
-      );
-    }
-  }
-
-  const blocks = tables.map((t) => ({
-    entityName: t.entityName,
-    stmts: generateProceduresFor(mod, t, {
-      byFields: byFieldsByEntity.get(t.entityName) ?? [],
-      useOptimisticConcurrency: occ,
-      idType: opts?.idType,
-    }),
-  }));
-
-  return `${blocks
-    .map(({ entityName, stmts }) =>
-      [`-- ${entityName}`, ...stmts].join("\n\n"),
-    )
-    .join("\n\n")}\n`;
+const PACKS: Partial<Record<SqlDialect, Pack>> = {
+  postgres: { dialect: postgres, kind: "function", up: pgUp, down: pgDown },
+  mysql: { dialect: mysql, kind: "procedure", up: myUp, down: myDown },
+  sqlserver: { dialect: sqlserver, kind: "procedure", up: ssUp, down: ssDown },
 };
 
-const listProcedureNames = ({
-  dialect,
-  tables,
-  byFieldsByEntity,
-  opts,
-}: GenerateProcedureFileArgs): RoutineName[] => {
-  const kind = ROUTINE_KIND[dialect];
-  if (!kind) return [];
-  const occ = opts?.useOptimisticConcurrency === true;
-  const out: RoutineName[] = [];
-  for (const t of tables) {
-    const byFields = byFieldsByEntity.get(t.entityName) ?? [];
-    for (const spec of procedureSpecs(t.entityName, { byFields, occ })) {
-      out.push({ kind, name: spec.name });
-    }
-  }
-  return out;
+const hasAuditColumns = (table: LiveTable, occ: boolean): boolean => {
+  if (table.datasourceType === "readonly-lookup") return false;
+  const customPk = table.fields.some((f) => f.isPrimaryKey && f.name !== "id");
+  if (!customPk) return true;
+  if (table.datasourceType === "many-to-many") return false;
+  return table.optimisticConcurrency ?? occ;
 };
 
-const generateStoredProceduresMigration = (
-  language: string,
-  data: SchemaData,
-  opts: GenerateTableOptions & { byFieldsByEntity: Map<string, string[]> },
-): { up: SqlFile; down: SqlFile } | null => {
-  const dialect = normalizeDialect(language);
-  if (!dialect || !supportsProcedures(dialect)) return null;
-
-  const tmpls = MIGRATION_TMPLS[dialect];
-  if (!tmpls) return null;
-
-  const occ = opts.useOptimisticConcurrency === true;
-  const tables = buildLiveTables(language, data, opts).filter((t) =>
-    tableHasAuditColumns(t, { useOptimisticConcurrency: occ }),
-  );
-  if (tables.length === 0) return null;
-
-  const procArgs: GenerateProcedureFileArgs = {
-    dialect,
-    tables,
-    byFieldsByEntity: opts.byFieldsByEntity,
-    opts: { useOptimisticConcurrency: occ, idType: opts.idType },
-  };
-  const procText = generateProcedureFile(procArgs).trimEnd();
-  if (procText.length === 0) return null;
-  const names = listProcedureNames(procArgs);
-
-  const up = fill(tmpls.up, { body: procText });
-  const down = fill(tmpls.down, {
-    drops: names.map((n) =>
-      fill(dropRoutineTmpl, {
-        verb: n.kind === "function" ? "FUNCTION" : "PROCEDURE",
-        name: n.name,
-      }).trimEnd(),
-    ),
-  });
-
-  return {
-    up: {
-      path: "0002_stored_procedures_up.sql",
-      content: up.endsWith("\n") ? up : `${up}\n`,
-    },
-    down: {
-      path: "0002_stored_procedures_down.sql",
-      content: down.endsWith("\n") ? down : `${down}\n`,
-    },
-  };
-};
-
-const loadSchema = async (ctx: GenerateContext): Promise<SchemaData> => {
-  const yaml = await ctx.reader.read(DATASOURCE_TYPES_YAML);
-  const seeds = (await ctx.reader.exists(DATASOURCE_SEEDS_YAML))
-    ? await ctx.reader.read(DATASOURCE_SEEDS_YAML)
-    : null;
-  return parseDatasourceTypes(
-    yaml,
-    ctx.settings,
-    seeds,
-  ) as unknown as SchemaData;
-};
+const withNl = (text: string): string =>
+  text.endsWith("\n") ? text : `${text}\n`;
 
 /** Stored-procedure migration for one dialect — empty when unsupported or disabled. */
 export const generateProceduresForDialect = async (
   dialect: SqlDialect,
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
-  if (!supportsProcedures(dialect)) return [];
+  const pack = PACKS[dialect];
   const ds = datasourceSettings(ctx.settings);
-  if (!ds.useStoredProcedures) return [];
+  if (!pack || !ds.useStoredProcedures) return [];
 
-  const data = await loadSchema(ctx);
-  const byFieldsByEntity = byFieldsFromDatasource(data);
-  const sp = generateStoredProceduresMigration(dialect, data, {
-    idType: ds.idType,
-    withUuidColumn: ds.withUuidColumn,
+  const types = await new SpecificationParser(ctx.reader).loadDatasourceTypes(
+    ds.idType,
+  );
+
+  const occ = ds.useOptimisticConcurrency;
+  const byFields = byFieldsFromDatasource(types);
+  const tables = buildLiveTables(dialect, types, {
     pluralizeTableNames: ds.pluralizeTableNames,
-    useOptimisticConcurrency: ds.useOptimisticConcurrency,
-    byFieldsByEntity,
+  }).filter((t) => hasAuditColumns(t, occ));
+  if (tables.length === 0) return [];
+
+  const parts = tables.map((t) => {
+    const fields = byFields.get(t.name) ?? [];
+    const table = {
+      name: t.tableName,
+      entityName: t.name,
+      fields: t.fields,
+    };
+    return {
+      body: [
+        `-- ${t.name}`,
+        ...generateProceduresFor(pack.dialect, table, {
+          byFields: fields,
+          useOptimisticConcurrency: occ,
+          idType: ds.idType,
+        }),
+      ].join("\n\n"),
+      drops: procedureSpecs(t.name, { byFields: fields, occ }).map((spec) =>
+        fill(dropRoutineTmpl, {
+          verb: pack.kind === "function" ? "FUNCTION" : "PROCEDURE",
+          name: spec.name,
+        }).trimEnd(),
+      ),
+    };
   });
-  return sp ? chainMigrationEntries(dialect, sp) : [];
+  const body = parts.map((p) => p.body).join("\n\n");
+  if (body.length === 0) return [];
+
+  return [
+    content(
+      `${dialect}/migrations/0002_stored_procedures_up.sql`,
+      withNl(fill(pack.up, { body })),
+    ),
+    content(
+      `${dialect}/migrations/0002_stored_procedures_down.sql`,
+      withNl(fill(pack.down, { drops: parts.flatMap((p) => p.drops) })),
+    ),
+  ];
 };

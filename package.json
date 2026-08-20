@@ -5,10 +5,6 @@
   "type": "module",
   "exports": {
     "./package.json": "./package.json",
-    "./generate-context": {
-      "types": "./dist/common/generate-context.d.ts",
-      "import": "./dist/common/generate-context.js"
-    },
     "./generate-sql": {
       "types": "./dist/generate-sql.d.ts",
       "import": "./dist/generate-sql.js"
@@ -34,7 +30,8 @@
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json && cp -R src/templates dist/",
     "prepare": "npm run build",
-    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
+    "test": "node --experimental-strip-types --test src/common/sql-schema.test.ts src/generate-sql.test.ts"
   },
   "dependencies": {
     "@deterministic-code/generators-common": "github:deterministic-code/generators-common",

@@ -1,4 +1,4 @@
-import type { GenerateContext } from "../common/generate-context.ts";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 
 /** sqlite has no stored procedures. */

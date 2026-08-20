@@ -1,4 +1,5 @@
 import { fill } from "@deterministic-code/generators-common/fill";
+import { mapColumnType } from "../sql-dialect.ts";
 import {
   pkFieldOf,
   writableNonAuditFields,
@@ -6,7 +7,6 @@ import {
 } from "./helpers.ts";
 import {
   renderInParams,
-  charParamType,
   makeGenerateUpdate,
   type ProcField,
   type ProcTable,
@@ -26,10 +26,11 @@ import {
 } from "../../resources/procedures-sqlserver.ts";
 
 const dialectName = "sqlserver";
-const auditType = "NVARCHAR(64)";
-
+const native = (type: string): string =>
+  mapColumnType(dialectName, { type });
+const auditType = native("datetime");
 const paramType = (field: ProcField): string =>
-  charParamType(field, "NVARCHAR", dialectName);
+  mapColumnType(dialectName, field);
 
 const allColumnNames = (
   table: ProcTable,
@@ -56,10 +57,10 @@ const generateCreate = ({
 }: RenderCtx): string => {
   const writable = writableNonAuditFields(table, idType);
   const params: Param[] = [
-    { name: "uuid", type: "NVARCHAR(36)" },
+    { name: "uuid", type: native("uuid") },
     ...writable.map((f) => ({ name: f.name, type: paramType(f) })),
-    { name: "created", type: "NVARCHAR(64)" },
-    { name: "updated", type: "NVARCHAR(64)" },
+    { name: "created", type: auditType },
+    { name: "updated", type: auditType },
   ];
   const cols = ["uuid", ...writable.map((f) => f.name), "created", "updated"];
   return fill(createTmpl, {

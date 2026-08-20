@@ -6,12 +6,10 @@ interface ProcField {
   name: string;
   type: string;
   size?: number;
-  primaryKey?: boolean;
+  isPrimaryKey?: boolean;
 }
 
 interface ProcTable {
-  name?: string;
-  entityName?: string;
   fields: ProcField[];
 }
 
@@ -36,8 +34,7 @@ export function pkFieldOf(
   table: ProcTable,
   idType: string | undefined,
 ): ProcField {
-  const fields = Array.isArray(table.fields) ? table.fields : [];
-  const custom = fields.find((f) => f && f.primaryKey === true);
+  const custom = table.fields.find((f) => f.isPrimaryKey === true);
   return custom ?? implicitIdField(idType);
 }
 

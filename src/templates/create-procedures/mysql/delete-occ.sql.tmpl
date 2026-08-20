@@ -5,7 +5,7 @@ CREATE PROCEDURE delete_{{entityName}}_optimistic_concurrency(
 )
 BEGIN
   DELETE t FROM {{tableTok}} t
-  WHERE t.{{pkName}} = {{pkName}} AND t.updated = {{{expectedUpdated}}};
+  WHERE t.{{pkName}} = {{pkName}} AND t.updated = expected_updated;
   SELECT ROW_COUNT() AS affected;
 END;
 GO

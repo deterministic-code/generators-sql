@@ -1,14 +1,16 @@
 import { createHash } from "node:crypto";
 import { sqlStringLiteral } from "../base-type-converter.ts";
 import { fill } from "@deterministic-code/generators-common/fill";
+import type {
+  DatasourceField,
+  SeedRow,
+  SeedValue,
+} from "@deterministic-code/generators-common/specification";
 import { dialectConverter, q, sqlDefault, type SqlDialect } from "./sql-dialect.ts";
 import {
   datasourceSettingsFor,
-  tableHasAuditColumns,
-  type GenerateTableOptions,
-  type NormalizedField,
-  type NormalizedTable,
-  type SeedValue,
+  type DatasourceOptions,
+  type LiveTable,
 } from "./sql-schema.ts";
 import {
   insertSeedTmpl,
@@ -18,11 +20,6 @@ import { renderSeedAfter, renderSeedBefore } from "./render-ddl.ts";
 type SeedCell = {
   row: Record<string, unknown>;
   col: string;
-};
-
-type SeedRow = {
-  id: number;
-  row: Record<string, SeedValue>;
 };
 
 const SEED_UUID_NAMESPACE = "9b3a8e6c-2f1d-4a5b-8c9d-1e2f3a4b5c6d";
@@ -70,60 +67,75 @@ const seedUuid = (tableName: string, id: number): string => {
   return bytesToUuidString(bytes);
 };
 
+const hasAuditColumns = (table: LiveTable, occ: boolean): boolean => {
+  if (table.datasourceType === "readonly-lookup") return false;
+  const hasCustomPk = table.fields.some(
+    (f) => f.isPrimaryKey && f.name !== "id",
+  );
+  if (!hasCustomPk) return true;
+  if (table.datasourceType === "many-to-many") return false;
+  return table.optimisticConcurrency ?? occ;
+};
+
 /** INSERT seed rows (and sequenced-id wraps) for one dialect. */
 class SeedGenerator {
   readonly dialect: SqlDialect;
   readonly idType: string;
   readonly withUuidColumn: boolean;
+  readonly occ: boolean;
 
-  constructor(dialect: SqlDialect, opts: GenerateTableOptions = {}) {
+  constructor(dialect: SqlDialect, opts: DatasourceOptions = {}) {
     const settings = datasourceSettingsFor(opts);
     this.dialect = dialect;
     this.idType = settings.idType;
     this.withUuidColumn = opts.withUuidColumn ?? settings.withUuidColumn;
+    this.occ = opts.useOptimisticConcurrency === true;
   }
 
-  generate(table: NormalizedTable): string[] {
-    if (!table.seeds || table.seeds.length === 0) return [];
+  generate(table: LiveTable, seeds: SeedRow[]): string[] {
+    if (seeds.length === 0) return [];
     const out: string[] = [];
     const sequenced = this.idType !== "uuid" && this.idType !== "string";
-    const quoted = q(this.dialect, table.name);
+    const quoted = q(this.dialect, table.tableName);
 
     if (sequenced) {
       const before = renderSeedBefore(this.dialect, quoted);
       if (before) out.push(before);
     }
-    for (const { id, row } of table.seeds) {
-      out.push(this.insert(table, { id, row }));
+    for (const seed of seeds) {
+      out.push(this.insert(table, seed));
     }
     if (sequenced) {
-      const after = renderSeedAfter(this.dialect, table.name, quoted);
+      const after = renderSeedAfter(
+        this.dialect,
+        table.tableName,
+        quoted,
+      );
       if (after) out.push(after);
     }
     return out;
   }
 
-  private insert(table: NormalizedTable, seed: SeedRow): string {
+  private insert(table: LiveTable, seed: SeedRow): string {
     const { id, row } = seed;
     const { cols, fieldByName } = this.colsForRow(table, row);
-    const uuidSourceName = table.entityName ?? table.name;
     const values = cols.map((c) => {
-      if (c === "id") return this.idValue(uuidSourceName, id);
-      if (c === "uuid") return sqlStringLiteral(seedUuid(uuidSourceName, id));
+      if (c === "id") return this.idValue(table.name, id);
+      if (c === "uuid") return sqlStringLiteral(seedUuid(table.name, id));
       return this.colValue(fieldByName.get(c), { row, col: c });
     });
     return fill(insertSeedTmpl, {
-      quotedTable: q(this.dialect, table.name),
+      quotedTable: q(this.dialect, table.tableName),
       colList: cols.map((c) => q(this.dialect, c)).join(", "),
       valueList: values.join(", "),
     }).trimEnd();
   }
 
   private colsForRow(
-    table: NormalizedTable,
+    table: LiveTable,
     row: Record<string, unknown>,
-  ): { cols: string[]; fieldByName: Map<string, NormalizedField> } {
-    const withAudit = tableHasAuditColumns(table);
+  ): { cols: string[]; fieldByName: Map<string, DatasourceField> } {
+    const withAudit = hasAuditColumns(table, this.occ);
     const colNames = new Set<string>();
     if (this.withUuidColumn && withAudit) colNames.add("uuid");
     colNames.add("id");
@@ -133,13 +145,13 @@ class SeedGenerator {
     return {
       cols: Array.from(colNames),
       fieldByName: new Map(
-        table.fields.map((f): [string, NormalizedField] => [f.name, f]),
+        table.fields.map((f): [string, DatasourceField] => [f.name, f]),
       ),
     };
   }
 
   private colValue(
-    field: NormalizedField | undefined,
+    field: DatasourceField | undefined,
     cell: SeedCell,
   ): string | null {
     const { row, col } = cell;
@@ -153,7 +165,7 @@ class SeedGenerator {
     return this.renderValue(field, v as SeedValue);
   }
 
-  private renderValue(field: NormalizedField, value: SeedValue): string {
+  private renderValue(field: DatasourceField, value: SeedValue): string {
     if (value === null || value === undefined) return "NULL";
     const render = SEED_VALUE[field.type];
     return render ? render(this.dialect, value) : sqlStringLiteral(value);
@@ -168,15 +180,16 @@ class SeedGenerator {
 /** Per-table seed SQL blocks for the initial migration (`-- Seeds: <table>`). */
 export const seedSections = (
   dialect: SqlDialect,
-  tables: NormalizedTable[],
-  seedOpts: GenerateTableOptions,
+  tables: LiveTable[],
+  seeds: Map<string, SeedRow[]>,
+  seedOpts: DatasourceOptions,
 ): string[] => {
   const gen = new SeedGenerator(dialect, seedOpts);
   const lines: string[] = [];
   for (const t of tables) {
-    const seeds = gen.generate(t);
-    if (seeds.length === 0) continue;
-    lines.push(`-- Seeds: ${t.name}`, seeds.join("\n"), "");
+    const sql = gen.generate(t, seeds.get(t.name) ?? []);
+    if (sql.length === 0) continue;
+    lines.push(`-- Seeds: ${t.tableName}`, sql.join("\n"), "");
   }
   return lines;
 };

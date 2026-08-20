@@ -36,62 +36,43 @@ const DIALECTS: Record<SqlDialect, DialectTypeConverter> = {
 };
 
 export const dialectConverter = (dialect: string): DialectTypeConverter => {
-  const key = normalizeDialect(dialect) ?? dialect;
-  const pack = DIALECTS[key as SqlDialect];
+  const pack = DIALECTS[dialect as SqlDialect];
   if (pack === undefined) {
     throw new Error(`Unknown dialect "${dialect}"`);
   }
   return pack;
 };
 
-export const normalizeDialect = (
-  raw: string | null | undefined,
-): SqlDialect | null => {
-  if (!raw) return null;
-  const key = raw.toLowerCase();
-  return (SQL_DIALECTS as readonly string[]).includes(key)
-    ? (key as SqlDialect)
-    : null;
-};
-
 const BACKEND_DATASOURCES = "backend.datasources";
-const LEGACY_DIALECTS = "datasource.dialects";
 
-/** Dialects listed in `backend.datasources`. `datasource.dialects` is rejected. */
+/** Dialects listed in `backend.datasources`. */
 export const dialectsFromSettings = (
   settings: Record<string, string>,
 ): SqlDialect[] => {
-  const legacy = settings[LEGACY_DIALECTS];
-  if (legacy !== undefined) {
-    throw new Error(
-      `${LEGACY_DIALECTS} is not supported; set ${BACKEND_DATASOURCES} instead (got ${JSON.stringify(legacy)}).`,
-    );
-  }
   const raw = settings[BACKEND_DATASOURCES];
   if (raw === undefined || raw === "") return ["sqlite"];
   const out: SqlDialect[] = [];
   for (const item of raw.split(",")) {
     const name = item.trim();
     if (name === "") continue;
-    const key = normalizeDialect(name);
-    if (key === null) {
+    if (DIALECTS[name as SqlDialect] === undefined) {
       throw new Error(
         `Unknown SQL dialect "${name}" in ${BACKEND_DATASOURCES}. Valid: ${SQL_DIALECTS.join(", ")}.`,
       );
     }
+    const key = name as SqlDialect;
     if (!out.includes(key)) out.push(key);
   }
   return out.length > 0 ? out : ["sqlite"];
 };
 
 export const requireDialect = (language: string): SqlDialect => {
-  const key = normalizeDialect(language);
-  if (!key) {
+  if (DIALECTS[language as SqlDialect] === undefined) {
     throw new Error(
       `Unknown SQL dialect "${language}". Valid: ${SQL_DIALECTS.join(", ")}.`,
     );
   }
-  return key;
+  return language as SqlDialect;
 };
 
 export const q = (dialect: string, ident: string): string => {
