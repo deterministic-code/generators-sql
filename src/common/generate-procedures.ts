@@ -3,7 +3,7 @@ import type { GenerateContext } from "@deterministic-code/generators-common/gene
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { DATASOURCE_TYPES_YAML } from "@deterministic-code/generators-common/specification";
 import { DeterministicParser } from "@deterministic-code/generators-common/specification-parser";
-import { createCasing } from "./default-casing.ts";
+import { createCasing, type PackCasing } from "./default-casing.ts";
 import { byFieldsFromDatasource } from "./datasource-by-fields.ts";
 import type { SqlDialect } from "./sql-dialect.ts";
 import {
@@ -46,8 +46,10 @@ const PACKS: Partial<Record<SqlDialect, Pack>> = {
   sqlserver: { dialect: sqlserver, verb: "PROCEDURE", up: ssUp, down: ssDown },
 };
 
-const withNl = (text: string): string =>
-  text.endsWith("\n") ? text : `${text}\n`;
+const withNl = (text: string, casing: PackCasing): string => {
+  const out = casing.applyKeywords(text);
+  return out.endsWith("\n") ? out : `${out}\n`;
+};
 
 /** Stored-procedure migration for one dialect — empty when unsupported or disabled. */
 export const generateProceduresForDialect = async (
@@ -88,11 +90,11 @@ export const generateProceduresForDialect = async (
   return [
     content(
       `${dialect}/migrations/0002_stored_procedures_up.sql`,
-      withNl(fill(pack.up, { body: parts.map((p) => p.body).join("\n\n") })),
+      withNl(fill(pack.up, { body: parts.map((p) => p.body).join("\n\n") }), casing),
     ),
     content(
       `${dialect}/migrations/0002_stored_procedures_down.sql`,
-      withNl(fill(pack.down, { drops: parts.flatMap((p) => p.drops) })),
+      withNl(fill(pack.down, { drops: parts.flatMap((p) => p.drops) }), casing),
     ),
   ];
 };

@@ -43,8 +43,8 @@ import {
   renderUpdatedTrigger,
 } from "./render-ddl.ts";
 
-const finalizeSql = (text: string): string => {
-  const out = text.replace(/\n{3,}/g, "\n\n");
+const finalizeSql = (text: string, casing: PackCasing): string => {
+  const out = casing.applyKeywords(text.replace(/\n{3,}/g, "\n\n"));
   return out.endsWith("\n") ? out : `${out}\n`;
 };
 
@@ -301,6 +301,7 @@ const generateInitialMigration = (
           hasSeeds: seeds.length > 0,
           seedBlocks: seeds,
         }),
+        casing,
       ),
     },
     down: {
@@ -312,6 +313,7 @@ const generateInitialMigration = (
             .reverse()
             .map((t) => renderDropTable(dialect, t.tableName)),
         }),
+        casing,
       ),
     },
   };
