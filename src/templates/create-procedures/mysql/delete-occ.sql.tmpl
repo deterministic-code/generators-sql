@@ -1,11 +1,11 @@
-DROP PROCEDURE IF EXISTS delete_{{entityName}}_optimistic_concurrency;
+DROP PROCEDURE IF EXISTS {{routineName}};
 GO
-CREATE PROCEDURE delete_{{entityName}}_optimistic_concurrency(
+CREATE PROCEDURE {{routineName}}(
 {{{params}}}
 )
 BEGIN
   DELETE t FROM {{tableTok}} t
-  WHERE t.{{pkName}} = {{pkName}} AND t.updated = expected_updated;
+  WHERE t.{{pkName}} = {{pkName}} AND t.{{updatedCol}} = {{expectedUpdated}};
   SELECT ROW_COUNT() AS affected;
 END;
 GO

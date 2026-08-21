@@ -3,12 +3,12 @@ import {
   paramsTmpl,
   updateBodyTmpl,
 } from "../../resources/procedures-shared.ts";
+import type { PackCasing } from "../default-casing.ts";
 import { q } from "../sql-dialect.ts";
 import {
   pad,
   paramAlignWidth,
   pkFieldOf,
-  pluralizeEntity,
   updatedFieldOf,
   writableNonAuditFields,
 } from "./helpers.ts";
@@ -56,6 +56,8 @@ export type RenderCtx = {
   table: ProcTable;
   tableTok: string;
   pk: ProcField;
+  casing: PackCasing;
+  routineName: string;
 };
 
 export type UpdateSpec = {
@@ -81,37 +83,41 @@ export const procedureSpecs = (
   entityName: string,
   byFields: string[],
   occ: boolean,
+  casing: PackCasing,
 ): ProcSpec[] => {
-  const plural = pluralizeEntity(entityName);
+  const name = (stem: string): string => casing.routineName(stem);
   return [
-    { op: "create", name: `create_${entityName}` },
-    { op: "findOne", name: `find_${entityName}` },
-    { op: "findAll", name: `find_${plural}` },
+    { op: "create", name: name(`create_${entityName}`) },
+    { op: "findOne", name: name(`find_${entityName}`) },
+    {
+      op: "findAll",
+      name: name(`find_${casing.pluralTableName(entityName)}`),
+    },
     ...byFields.map((bf) => ({
       op: "findBy" as const,
-      name: `find_${entityName}_by_${bf}`,
+      name: name(`find_${entityName}_by_${bf}`),
       byField: bf,
     })),
-    { op: "update", name: `update_${entityName}` },
+    { op: "update", name: name(`update_${entityName}`) },
     ...(occ
       ? [
           {
             op: "updateOcc" as const,
-            name: `update_${entityName}_optimistic_concurrency`,
+            name: name(`update_${entityName}_optimistic_concurrency`),
           },
         ]
       : []),
     ...byFields.map((bf) => ({
       op: "updateBy" as const,
-      name: `update_${entityName}_by_${bf}`,
+      name: name(`update_${entityName}_by_${bf}`),
       byField: bf,
     })),
-    { op: "delete", name: `delete_${entityName}` },
+    { op: "delete", name: name(`delete_${entityName}`) },
     ...(occ
       ? [
           {
             op: "deleteOcc" as const,
-            name: `delete_${entityName}_optimistic_concurrency`,
+            name: name(`delete_${entityName}_optimistic_concurrency`),
           },
         ]
       : []),
@@ -137,6 +143,7 @@ const updateSpec = (
   table: ProcTable,
   variant: Variant,
   name: string,
+  casing: PackCasing,
 ): UpdateSpec => {
   const { occ = false, byField } = variant;
   const key = byField ? requireField(table, byField, name) : pkFieldOf(table);
@@ -144,19 +151,20 @@ const updateSpec = (
   const writable = writableNonAuditFields(table).filter(
     (f) => f.name !== byField,
   );
+  const col = (field: string): string => casing.columnName(field);
   return {
     writable,
     name,
     params: [
-      { name: key.name, type: dialect.paramType(key) },
+      { name: col(key.name), type: dialect.paramType(key) },
       ...(occ
-        ? [{ name: "expected_updated", type: dialect.paramType(updated) }]
+        ? [{ name: col("expected_updated"), type: dialect.paramType(updated) }]
         : []),
       ...writable.map((f) => ({
-        name: f.name,
+        name: col(f.name),
         type: dialect.paramType(f),
       })),
-      { name: "new_updated", type: dialect.paramType(updated) },
+      { name: col("new_updated"), type: dialect.paramType(updated) },
     ],
   };
 };
@@ -186,17 +194,17 @@ const renderOp = (dialect: Dialect, spec: ProcSpec, ctx: RenderCtx): string => {
       return dialect.generateUpdate(
         ctx,
         variant,
-        updateSpec(dialect, ctx.table, variant, spec.name),
+        updateSpec(dialect, ctx.table, variant, spec.name, ctx.casing),
       );
     }
     case "delete":
       return dialect.generateDelete(ctx);
     case "deleteOcc": {
-      const { pk, table } = ctx;
+      const { pk, table, casing } = ctx;
       return dialect.generateDeleteOcc(ctx, [
-        { name: pk.name, type: dialect.paramType(pk) },
+        { name: casing.columnName(pk.name), type: dialect.paramType(pk) },
         {
-          name: "expected_updated",
+          name: casing.columnName("expected_updated"),
           type: dialect.paramType(updatedFieldOf(table)),
         },
       ]);
@@ -209,15 +217,17 @@ export const generateProceduresFor = (
   table: ProcTable,
   byFields: string[],
   occ: boolean,
+  casing: PackCasing,
 ): string[] => {
-  const ctx: RenderCtx = {
+  const base: Omit<RenderCtx, "routineName"> = {
     entityName: table.entityName,
     table,
     tableTok: q(dialect.dialectName, table.name),
     pk: pkFieldOf(table),
+    casing,
   };
-  return procedureSpecs(table.entityName, byFields, occ).map((spec) =>
-    renderOp(dialect, spec, ctx),
+  return procedureSpecs(table.entityName, byFields, occ, casing).map((spec) =>
+    renderOp(dialect, spec, { ...base, routineName: spec.name }),
   );
 };
 
@@ -245,21 +255,22 @@ export type UpdateProcDialect = {
 export const makeGenerateUpdate =
   (d: UpdateProcDialect) =>
   (ctx: RenderCtx, variant: Variant, spec: UpdateSpec): string => {
-    const argOf = (col: string) => d.argRef(col, spec.name);
+    const col = (field: string): string => ctx.casing.columnName(field);
+    const argOf = (field: string) => d.argRef(col(field), spec.name);
     const pk = ctx.pk.name;
     const where = variant.byField
-      ? `${d.colRef(variant.byField)} = ${argOf(variant.byField)}`
+      ? `${d.colRef(col(variant.byField))} = ${argOf(variant.byField)}`
       : variant.occ === true
-        ? `${d.colRef(pk)} = ${argOf(pk)} AND ${d.colRef("updated")} = ${argOf("expected_updated")}`
-        : `${d.colRef(pk)} = ${argOf(pk)}`;
+        ? `${d.colRef(col(pk))} = ${argOf(pk)} AND ${d.colRef(col("updated"))} = ${argOf("expected_updated")}`
+        : `${d.colRef(col(pk))} = ${argOf(pk)}`;
     const sets = [
       ...spec.writable.map((f) => ({
-        lhs: d.setLhs(f.name),
+        lhs: d.setLhs(col(f.name)),
         padEq: "    = ",
         rhs: argOf(f.name),
       })),
       {
-        lhs: d.setLhs("updated"),
+        lhs: d.setLhs(col("updated")),
         padEq: " = ",
         rhs: argOf("new_updated"),
       },

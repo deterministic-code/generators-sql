@@ -14,6 +14,7 @@ import {
   sqlDefault,
   type SqlDialect,
 } from "./sql-dialect.ts";
+import type { PackCasing } from "./default-casing.ts";
 import type { LiveTable } from "./sql-schema.ts";
 
 const SEED_UUID_NAMESPACE = "9b3a8e6c-2f1d-4a5b-8c9d-1e2f3a4b5c6d";
@@ -91,6 +92,7 @@ const insert = (
   dialect: SqlDialect,
   table: LiveTable,
   seed: SeedRow,
+  casing: PackCasing,
 ): string => {
   const cols = colsForRow(table, seed.row);
   const values = cols.map((c) => {
@@ -104,7 +106,7 @@ const insert = (
   });
   return fill(insertSeedTmpl, {
     quotedTable: q(dialect, table.tableName),
-    colList: cols.map((c) => q(dialect, c)).join(", "),
+    colList: cols.map((c) => q(dialect, casing.columnName(c))).join(", "),
     valueList: values.join(", "),
   }).trimEnd();
 };
@@ -114,6 +116,7 @@ export const seedSections = (
   dialect: SqlDialect,
   tables: LiveTable[],
   seeds: Map<string, SeedRow[]>,
+  casing: PackCasing,
 ): string[] => {
   const lines: string[] = [];
   for (const table of tables) {
@@ -122,15 +125,22 @@ export const seedSections = (
     const quoted = q(dialect, table.tableName);
     const t = pkType(table);
     const sequenced = t !== "uuid" && t !== "string";
+    const idColumn = casing.columnName("id");
     const before = sequenced ? renderSeedBefore(dialect, quoted) : "";
     const after = sequenced
-      ? renderSeedAfter(dialect, table.tableName, quoted)
+      ? renderSeedAfter(
+          dialect,
+          table.tableName,
+          quoted,
+          idColumn,
+          q(dialect, idColumn),
+        )
       : "";
     lines.push(
       `-- Seeds: ${table.tableName}`,
       [
         ...(before ? [before] : []),
-        ...rows.map((s) => insert(dialect, table, s)),
+        ...rows.map((s) => insert(dialect, table, s, casing)),
         ...(after ? [after] : []),
       ].join("\n"),
       "",

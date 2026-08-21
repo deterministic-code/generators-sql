@@ -1,6 +1,6 @@
-DROP PROCEDURE IF EXISTS find_{{plural}};
+DROP PROCEDURE IF EXISTS {{routineName}};
 GO
-CREATE PROCEDURE find_{{plural}}()
+CREATE PROCEDURE {{routineName}}()
 BEGIN
   SELECT {{aliasedCols}} FROM {{tableTok}} t ORDER BY t.{{pkName}};
 END;

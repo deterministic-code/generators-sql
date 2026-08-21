@@ -1,6 +1,6 @@
-DROP PROCEDURE IF EXISTS delete_{{entityName}};
+DROP PROCEDURE IF EXISTS {{routineName}};
 GO
-CREATE PROCEDURE delete_{{entityName}}(IN {{pkName}} {{pkType}})
+CREATE PROCEDURE {{routineName}}(IN {{pkName}} {{pkType}})
 BEGIN
   DELETE t FROM {{tableTok}} t WHERE t.{{pkName}} = {{pkName}};
   SELECT ROW_COUNT() AS affected;

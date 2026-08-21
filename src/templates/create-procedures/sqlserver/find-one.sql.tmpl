@@ -1,4 +1,4 @@
-CREATE OR ALTER PROCEDURE find_{{entityName}} @{{pkName}} {{pkType}}
+CREATE OR ALTER PROCEDURE {{routineName}} @{{pkName}} {{pkType}}
 AS
 BEGIN
   SELECT {{cols}} FROM {{tableTok}} WHERE {{pkName}} = @{{pkName}};

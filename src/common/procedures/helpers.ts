@@ -1,7 +1,5 @@
 /** Dialect-agnostic helpers shared by the postgres/mysql/sqlserver stored-procedure generators. */
 
-import { effectiveTableName } from "../effective-table-name.ts";
-
 interface ProcField {
   name: string;
   type: string;
@@ -57,8 +55,12 @@ export const updatedFieldOf = (table: ProcTable): ProcField => {
 };
 
 /** Expanded columns qualified with a table alias (default `t`). */
-export const aliasedColumns = (table: ProcTable, alias = "t"): string =>
-  table.fields.map((f) => `${alias}.${f.name}`).join(", ");
+export const aliasedColumns = (
+  table: ProcTable,
+  alias = "t",
+  columnName: (field: string) => string = (field) => field,
+): string =>
+  table.fields.map((f) => `${alias}.${columnName(f.name)}`).join(", ");
 
 export function paramAlignWidth(params: { name: string }[]): number {
   return params.reduce((m, p) => Math.max(m, p.name.length), 0);
@@ -67,7 +69,3 @@ export function paramAlignWidth(params: { name: string }[]): number {
 export function pad(s: string, w: number): string {
   return s + " ".repeat(Math.max(0, w - s.length));
 }
-
-/** Pluralize an entity name for routine names — same rules as physical table names. */
-export const pluralizeEntity = (name: string): string =>
-  effectiveTableName(name, true);

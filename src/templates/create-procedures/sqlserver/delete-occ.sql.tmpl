@@ -1,9 +1,9 @@
-CREATE OR ALTER PROCEDURE delete_{{entityName}}_optimistic_concurrency
+CREATE OR ALTER PROCEDURE {{routineName}}
 {{{params}}}
 AS
 BEGIN
   DELETE FROM {{tableTok}}
-  WHERE {{pkName}} = @{{pkName}} AND updated = @expected_updated;
+  WHERE {{pkName}} = @{{pkName}} AND {{updatedCol}} = @{{expectedUpdated}};
   SELECT @@ROWCOUNT AS affected;
 END;
 GO

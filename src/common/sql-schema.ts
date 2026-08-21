@@ -1,9 +1,5 @@
 import type { ExpandedDatasourceType } from "@deterministic-code/generators-common/specification";
-import { effectiveTableName } from "./effective-table-name.ts";
-
-export type DatasourceOptions = {
-  pluralizeTableNames?: boolean;
-};
+import type { PackCasing } from "./default-casing.ts";
 
 /** Flattened `datasource.*` flags. On unless `"false"`; stored procedures are opt-in `"true"`. */
 export const datasourceSettings = (settings: Record<string, string>) => ({
@@ -59,13 +55,13 @@ const topoSort = (tables: LiveTable[]): LiveTable[] => {
 /** Skip `skipMigrations` tables, attach physical names, parent-before-child order. */
 export const buildLiveTables = (
   types: ExpandedDatasourceType[],
-  pluralizeTableNames: boolean,
+  casing: PackCasing,
 ): LiveTable[] =>
   topoSort(
     types
       .filter((t) => !t.skipMigrations)
       .map((t) => ({
         ...t,
-        tableName: effectiveTableName(t.name, pluralizeTableNames),
+        tableName: casing.tableName(t.name),
       })),
   );
