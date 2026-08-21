@@ -2,7 +2,7 @@ import { fill } from "@deterministic-code/generators-common/fill";
 import type {
   DatasourceField,
   DatasourceIndex,
-  ExpandedDatasourceType,
+  DatasourceType,
   SeedRow,
 } from "@deterministic-code/generators-common/specification";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
@@ -281,7 +281,7 @@ const flattenTable = (
 
 const generateInitialMigration = (
   language: string,
-  types: ExpandedDatasourceType[],
+  types: DatasourceType[],
   seedsByTable: Map<string, SeedRow[]>,
   casing: PackCasing,
 ): { up: SqlFile; down: SqlFile } => {
@@ -340,7 +340,7 @@ const customEntries = async (
 const loadSchema = async (
   ctx: GenerateContext,
 ): Promise<{
-  types: ExpandedDatasourceType[];
+  types: DatasourceType[];
   seeds: Map<string, SeedRow[]>;
 }> => {
   await ctx.reader.read(DATASOURCE_TYPES_YAML);

@@ -1,4 +1,4 @@
-import type { ExpandedDatasourceType } from "@deterministic-code/generators-common/specification";
+import type { DatasourceType } from "@deterministic-code/generators-common/specification";
 import type { PackCasing } from "./default-casing.ts";
 
 /** Flattened `datasource.*` flags. On unless `"false"`; stored procedures are opt-in `"true"`. */
@@ -11,7 +11,7 @@ export const datasourceSettings = (settings: Record<string, string>) => ({
     String(settings["datasource.use_optimistic_concurrency"]) !== "false",
 });
 
-export type LiveTable = ExpandedDatasourceType & { tableName: string };
+export type LiveTable = DatasourceType & { tableName: string };
 
 export const hasAuditColumns = (table: {
   fields: { name: string }[];
@@ -54,7 +54,7 @@ const topoSort = (tables: LiveTable[]): LiveTable[] => {
 
 /** Skip `skipMigrations` tables, attach physical names, parent-before-child order. */
 export const buildLiveTables = (
-  types: ExpandedDatasourceType[],
+  types: DatasourceType[],
   casing: PackCasing,
 ): LiveTable[] =>
   topoSort(
