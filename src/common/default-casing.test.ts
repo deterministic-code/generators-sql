@@ -1,93 +1,220 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { createCasing } from "./default-casing.ts";
+import { createCasing, defaultCasing } from "./default-casing.ts";
 
-const NAME = "notification_type";
+type Format = "Camel" | "Pascal" | "Snake" | "Kebab";
+type Pluralize = "on" | "off";
+
+const FORMATS: readonly Format[] = ["Camel", "Pascal", "Snake", "Kebab"];
+const PLURALIZE: readonly Pluralize[] = ["on", "off"];
+
+const ENTITY = "notification_type";
 const FIELD = "channel_name";
+const ROUTINE = `create_${ENTITY}`;
+
+const settingsFor = (
+  leaf: "types" | "fields" | "file_names" | "directories",
+  format: Format,
+  pluralize: Pluralize = "on",
+): Record<string, string> => ({
+  [`datasource.casing.${leaf}`]: format,
+  ...(pluralize === "off"
+    ? { "datasource.pluralize_datatable_names": "false" }
+    : {}),
+});
+
+const TYPES = {
+  convertTypes: {
+    Camel: "notificationType",
+    Pascal: "NotificationType",
+    Snake: "notification_type",
+    Kebab: "notification-type",
+  },
+  routineName: {
+    Camel: "createNotificationType",
+    Pascal: "CreateNotificationType",
+    Snake: "create_notification_type",
+    Kebab: "create-notification-type",
+  },
+  tableName: {
+    on: {
+      Camel: "notificationTypes",
+      Pascal: "NotificationTypes",
+      Snake: "notification_types",
+      Kebab: "notification-types",
+    },
+    off: {
+      Camel: "notificationType",
+      Pascal: "NotificationType",
+      Snake: "notification_type",
+      Kebab: "notification-type",
+    },
+  },
+  userTable: {
+    on: {
+      Camel: "users",
+      Pascal: "Users",
+      Snake: "users",
+      Kebab: "users",
+    },
+    off: {
+      Camel: "user",
+      Pascal: "User",
+      Snake: "user",
+      Kebab: "user",
+    },
+  },
+  constraintName: {
+    on: {
+      Camel: "notificationTypesChannelNameForeignKey",
+      Pascal: "NotificationTypesChannelNameForeignKey",
+      Snake: "notification_types_channel_name_foreign_key",
+      Kebab: "notification-types-channel-name-foreign-key",
+    },
+    off: {
+      Camel: "notificationTypeChannelNameForeignKey",
+      Pascal: "NotificationTypeChannelNameForeignKey",
+      Snake: "notification_type_channel_name_foreign_key",
+      Kebab: "notification-type-channel-name-foreign-key",
+    },
+  },
+  triggerName: {
+    on: {
+      Camel: "trgNotificationTypesUpdatedAt",
+      Pascal: "TrgNotificationTypesUpdatedAt",
+      Snake: "trg_notification_types_updated_at",
+      Kebab: "trg-notification-types-updated-at",
+    },
+    off: {
+      Camel: "trgNotificationTypeUpdatedAt",
+      Pascal: "TrgNotificationTypeUpdatedAt",
+      Snake: "trg_notification_type_updated_at",
+      Kebab: "trg-notification-type-updated-at",
+    },
+  },
+} as const;
+
+const FIELDS = {
+  channel_name: {
+    Camel: "channelName",
+    Pascal: "ChannelName",
+    Snake: "channel_name",
+    Kebab: "channel-name",
+  },
+  role_id: {
+    Camel: "roleId",
+    Pascal: "RoleId",
+    Snake: "role_id",
+    Kebab: "role-id",
+  },
+} as const;
+
+const FILES = {
+  Camel: "notificationType",
+  Pascal: "NotificationType",
+  Snake: "notification_type",
+  Kebab: "notification-type",
+} as const;
 
 describe("createCasing Auto defaults", () => {
   it("matches Default Casings for SQL", () => {
     const casing = createCasing({});
-    assert.equal(casing.convertFileName(NAME), "notification_type");
-    assert.equal(casing.convertTypes(NAME), "notification_type");
-    assert.equal(casing.convertFields(NAME), "notification_type");
-    assert.equal(casing.convertDirectories(NAME), "notification_type");
-    assert.equal(casing.filePath(NAME), "notification_type.sql");
-    assert.equal(casing.fileBase(NAME), "notification_type");
-    assert.equal(casing.directory(NAME), "notification_type");
-    assert.equal(casing.tableName(NAME), "notification_types");
+    assert.equal(casing.convertFileName(ENTITY), "notification_type");
+    assert.equal(casing.convertTypes(ENTITY), "notification_type");
+    assert.equal(casing.convertFields(ENTITY), "notification_type");
+    assert.equal(casing.convertDirectories(ENTITY), "notification_type");
+    assert.equal(casing.filePath(ENTITY), "notification_type.sql");
+    assert.equal(casing.fileBase(ENTITY), "notification_type");
+    assert.equal(casing.directory(ENTITY), "notification_type");
+    assert.equal(casing.tableName(ENTITY), "notification_types");
     assert.equal(casing.columnName(FIELD), "channel_name");
     assert.equal(
-      casing.constraintName(NAME, FIELD, "foreign_key"),
+      casing.constraintName(ENTITY, FIELD, "foreign_key"),
       "notification_types_channel_name_foreign_key",
     );
-    assert.equal(casing.triggerName(NAME), "trg_notification_types_updated_at");
+    assert.equal(casing.triggerName(ENTITY), "trg_notification_types_updated_at");
+    assert.equal(casing.routineName(ROUTINE), "create_notification_type");
+    assert.equal(casing.pluralTableName(ENTITY), "notification_types");
+  });
+
+  it("defaultCasing is createCasing", () => {
+    const settings = { "datasource.casing.types": "Pascal" };
+    const viaDefault = defaultCasing(settings);
+    const viaCreate = createCasing(settings);
+    assert.equal(viaDefault.convertTypes(ENTITY), viaCreate.convertTypes(ENTITY));
+    assert.equal(viaDefault.convertFields(FIELD), viaCreate.convertFields(FIELD));
     assert.equal(
-      casing.routineName(`create_${NAME}`),
-      "create_notification_type",
+      viaDefault.convertFileName(ENTITY),
+      viaCreate.convertFileName(ENTITY),
     );
-    assert.equal(casing.pluralTableName(NAME), "notification_types");
+    assert.equal(
+      viaDefault.convertDirectories(ENTITY),
+      viaCreate.convertDirectories(ENTITY),
+    );
   });
 });
 
+describe("createCasing conversion matrix", () => {
+  for (const format of FORMATS) {
+    for (const pluralize of PLURALIZE) {
+      it(`types × ${format} × pluralize ${pluralize}`, () => {
+        const casing = createCasing(settingsFor("types", format, pluralize));
+        assert.equal(casing.convertTypes(ENTITY), TYPES.convertTypes[format]);
+        assert.equal(casing.tableName(ENTITY), TYPES.tableName[pluralize][format]);
+        assert.equal(casing.tableName("user"), TYPES.userTable[pluralize][format]);
+        assert.equal(casing.pluralTableName(ENTITY), TYPES.tableName.on[format]);
+        assert.equal(casing.pluralTableName("user"), TYPES.userTable.on[format]);
+        assert.equal(
+          casing.constraintName(ENTITY, FIELD, "foreign_key"),
+          TYPES.constraintName[pluralize][format],
+        );
+        assert.equal(
+          casing.triggerName(ENTITY),
+          TYPES.triggerName[pluralize][format],
+        );
+        assert.equal(casing.routineName(ROUTINE), TYPES.routineName[format]);
+        assert.equal(casing.columnName(FIELD), "channel_name");
+        assert.equal(casing.fileBase(ENTITY), "notification_type");
+        assert.equal(casing.directory(ENTITY), "notification_type");
+      });
+    }
+  }
+
+  for (const format of FORMATS) {
+    it(`fields × ${format}`, () => {
+      const casing = createCasing(settingsFor("fields", format));
+      assert.equal(casing.columnName("channel_name"), FIELDS.channel_name[format]);
+      assert.equal(casing.convertFields("channel_name"), FIELDS.channel_name[format]);
+      assert.equal(casing.columnName("role_id"), FIELDS.role_id[format]);
+      assert.equal(casing.convertFields("role_id"), FIELDS.role_id[format]);
+      assert.equal(casing.tableName(ENTITY), "notification_types");
+      assert.equal(casing.convertTypes(ENTITY), "notification_type");
+    });
+  }
+
+  for (const format of FORMATS) {
+    it(`file_names × ${format}`, () => {
+      const casing = createCasing(settingsFor("file_names", format));
+      assert.equal(casing.convertFileName(ENTITY), FILES[format]);
+      assert.equal(casing.fileBase(ENTITY), FILES[format]);
+      assert.equal(casing.filePath(ENTITY), `${FILES[format]}.sql`);
+      assert.equal(casing.tableName(ENTITY), "notification_types");
+      assert.equal(casing.directory(ENTITY), "notification_type");
+    });
+  }
+
+  for (const format of FORMATS) {
+    it(`directories × ${format}`, () => {
+      const casing = createCasing(settingsFor("directories", format));
+      assert.equal(casing.convertDirectories(ENTITY), FILES[format]);
+      assert.equal(casing.directory(ENTITY), FILES[format]);
+      assert.equal(casing.fileBase(ENTITY), "notification_type");
+      assert.equal(casing.tableName(ENTITY), "notification_types");
+    });
+  }
+});
+
 describe("createCasing overrides", () => {
-  it("pascals types without changing fields", () => {
-    const casing = createCasing({ "datasource.casing.types": "Pascal" });
-    assert.equal(casing.convertTypes(NAME), "NotificationType");
-    assert.equal(casing.tableName(NAME), "NotificationTypes");
-    assert.equal(casing.convertFields(FIELD), "channel_name");
-    assert.equal(casing.columnName(FIELD), "channel_name");
-    assert.equal(casing.convertFileName(NAME), "notification_type");
-    assert.equal(casing.convertDirectories(NAME), "notification_type");
-    assert.equal(
-      casing.constraintName(NAME, FIELD, "foreign_key"),
-      "NotificationTypesChannelNameForeignKey",
-    );
-    assert.equal(casing.triggerName(NAME), "TrgNotificationTypesUpdatedAt");
-    assert.equal(
-      casing.routineName(`create_${NAME}`),
-      "CreateNotificationType",
-    );
-  });
-
-  it("camels fields without changing types", () => {
-    const casing = createCasing({ "datasource.casing.fields": "Camel" });
-    assert.equal(casing.columnName("role_id"), "roleId");
-    assert.equal(casing.convertFields("role_id"), "roleId");
-    assert.equal(casing.tableName(NAME), "notification_types");
-    assert.equal(casing.convertTypes(NAME), "notification_type");
-  });
-
-  it("pascals fields", () => {
-    const casing = createCasing({ "datasource.casing.fields": "Pascal" });
-    assert.equal(casing.columnName("role_id"), "RoleId");
-  });
-
-  it("kebabs fields", () => {
-    const casing = createCasing({ "datasource.casing.fields": "Kebab" });
-    assert.equal(casing.columnName("role_id"), "role-id");
-  });
-
-  it("kebabs file names and directories independently", () => {
-    const casing = createCasing({
-      "datasource.casing.file_names": "Kebab",
-      "datasource.casing.directories": "Kebab",
-    });
-    assert.equal(casing.fileBase(NAME), "notification-type");
-    assert.equal(casing.filePath(NAME), "notification-type.sql");
-    assert.equal(casing.directory(NAME), "notification-type");
-    assert.equal(casing.tableName(NAME), "notification_types");
-  });
-
-  it("snakes directories independently of files", () => {
-    const casing = createCasing({
-      "datasource.casing.file_names": "Pascal",
-      "datasource.casing.directories": "Snake",
-    });
-    assert.equal(casing.fileBase(NAME), "NotificationType");
-    assert.equal(casing.directory(NAME), "notification_type");
-  });
-
   it("treats Auto and empty as omitted", () => {
     const omitted = createCasing({});
     const explicit = createCasing({
@@ -96,10 +223,10 @@ describe("createCasing overrides", () => {
       "datasource.casing.fields": "AUTO",
       "datasource.casing.directories": "",
     });
-    assert.equal(omitted.tableName(NAME), explicit.tableName(NAME));
+    assert.equal(omitted.tableName(ENTITY), explicit.tableName(ENTITY));
     assert.equal(omitted.columnName(FIELD), explicit.columnName(FIELD));
-    assert.equal(omitted.fileBase(NAME), explicit.fileBase(NAME));
-    assert.equal(omitted.directory(NAME), explicit.directory(NAME));
+    assert.equal(omitted.fileBase(ENTITY), explicit.fileBase(ENTITY));
+    assert.equal(omitted.directory(ENTITY), explicit.directory(ENTITY));
   });
 
   it("ignores languages.sql.casing keys", () => {
@@ -107,25 +234,21 @@ describe("createCasing overrides", () => {
       "languages.sql.casing.types": "Pascal",
       "languages.sql.casing.fields": "Camel",
     });
-    assert.equal(casing.tableName(NAME), "notification_types");
+    assert.equal(casing.tableName(ENTITY), "notification_types");
     assert.equal(casing.columnName(FIELD), "channel_name");
   });
 
-  it("throws on an unknown case format with the datasource path", () => {
-    assert.throws(
-      () => createCasing({ "datasource.casing.types": "screaming" }),
-      /datasource\.casing\.types must be one of/,
-    );
-  });
+  for (const leaf of ["file_names", "types", "fields", "directories"] as const) {
+    it(`throws on an unknown case format for ${leaf}`, () => {
+      assert.throws(
+        () => createCasing({ [`datasource.casing.${leaf}`]: "screaming" }),
+        new RegExp(`datasource\\.casing\\.${leaf} must be one of`),
+      );
+    });
+  }
 });
 
 describe("createCasing tableName pluralize", () => {
-  it("pluralizes by default", () => {
-    const casing = createCasing({});
-    assert.equal(casing.tableName("user"), "users");
-    assert.equal(casing.tableName("backend_type"), "backend_types");
-  });
-
   it("pluralizes when the flag is true or empty", () => {
     assert.equal(
       createCasing({ "datasource.pluralize_datatable_names": "true" }).tableName(
@@ -141,49 +264,11 @@ describe("createCasing tableName pluralize", () => {
     );
   });
 
-  it("does not pluralize when the flag is false", () => {
-    const casing = createCasing({
-      "datasource.pluralize_datatable_names": "false",
-    });
-    assert.equal(casing.tableName("user"), "user");
-    assert.equal(casing.tableName(NAME), "notification_type");
-    assert.equal(
-      casing.constraintName(NAME, FIELD, "foreign_key"),
-      "notification_type_channel_name_foreign_key",
-    );
-    assert.equal(casing.triggerName(NAME), "trg_notification_type_updated_at");
-  });
-
   it("handles irregular and already-plural names", () => {
     const casing = createCasing({});
     assert.equal(casing.tableName("person"), "people");
     assert.equal(casing.tableName("category"), "categories");
     assert.equal(casing.tableName("users"), "users");
     assert.equal(casing.tableName(""), "");
-  });
-
-  it("pluralizes then applies types casing", () => {
-    const pascalOn = createCasing({ "datasource.casing.types": "Pascal" });
-    assert.equal(pascalOn.tableName(NAME), "NotificationTypes");
-    const pascalOff = createCasing({
-      "datasource.casing.types": "Pascal",
-      "datasource.pluralize_datatable_names": "false",
-    });
-    assert.equal(pascalOff.tableName(NAME), "NotificationType");
-    const kebabOn = createCasing({ "datasource.casing.types": "Kebab" });
-    assert.equal(kebabOn.tableName(NAME), "notification-types");
-  });
-
-  it("pluralTableName always pluralizes", () => {
-    const off = createCasing({
-      "datasource.pluralize_datatable_names": "false",
-    });
-    assert.equal(off.pluralTableName("user"), "users");
-    assert.equal(off.pluralTableName(NAME), "notification_types");
-    const pascalOff = createCasing({
-      "datasource.casing.types": "Pascal",
-      "datasource.pluralize_datatable_names": "false",
-    });
-    assert.equal(pascalOff.pluralTableName(NAME), "NotificationTypes");
   });
 });
