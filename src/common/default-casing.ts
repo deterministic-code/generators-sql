@@ -51,8 +51,9 @@ const strategyFromSettings = (
       settingsForStrategy(settings),
     );
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(message.replaceAll(LANGUAGE_SQL_CASING, DATASOURCE_CASING));
+    throw new Error(
+      (error as Error).message.replaceAll(LANGUAGE_SQL_CASING, DATASOURCE_CASING),
+    );
   }
 };
 
