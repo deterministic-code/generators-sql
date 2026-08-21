@@ -20,8 +20,7 @@ import type { LiveTable } from "./sql-schema.ts";
 const SEED_UUID_NAMESPACE = "9b3a8e6c-2f1d-4a5b-8c9d-1e2f3a4b5c6d";
 
 const pkType = (table: LiveTable): string =>
-  table.fields.find((f) => f.name === table.primaryKeyColumn)?.type ??
-  "integer";
+  table.fields.find((f) => f.isPrimaryKey === true)?.type ?? "integer";
 
 const seedUuid = (tableName: string, id: number): string => {
   const bytes = Buffer.from(
