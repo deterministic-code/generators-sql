@@ -1,9 +1,7 @@
 import { fill } from "@deterministic-code/generators-common/fill";
 import { mapColumnType } from "../sql-dialect.ts";
 import {
-  pkFieldOf,
-  writableNonAuditFields,
-  hasSystemUuidColumn,
+  createParamFields,
   pluralizeEntity,
 } from "./helpers.ts";
 import {
@@ -27,22 +25,11 @@ import {
 } from "../../resources/procedures-sqlserver.ts";
 
 const dialectName = "sqlserver";
-const native = (type: string): string =>
-  mapColumnType(dialectName, { type });
-const auditType = native("datetime");
 const paramType = (field: ProcField): string =>
   mapColumnType(dialectName, field);
 
-const allColumnNames = (table: ProcTable): string[] => {
-  const pk = pkFieldOf(table);
-  return [
-    pk.name,
-    ...(hasSystemUuidColumn(table) ? ["uuid"] : []),
-    ...writableNonAuditFields(table).map((f) => f.name),
-    "created",
-    "updated",
-  ];
-};
+const allColumnNames = (table: ProcTable): string[] =>
+  table.fields.map((f) => f.name);
 
 const renderParams = (params: Param[]): string =>
   renderInParams(params, "@");
@@ -52,15 +39,12 @@ const generateCreate = ({
   table,
   tableTok,
 }: RenderCtx): string => {
-  const writable = writableNonAuditFields(table);
-  const uuidCols = hasSystemUuidColumn(table) ? ["uuid"] : [];
-  const params: Param[] = [
-    ...uuidCols.map((name) => ({ name, type: native("uuid") })),
-    ...writable.map((f) => ({ name: f.name, type: paramType(f) })),
-    { name: "created", type: auditType },
-    { name: "updated", type: auditType },
-  ];
-  const cols = [...uuidCols, ...writable.map((f) => f.name), "created", "updated"];
+  const paramFields = createParamFields(table);
+  const params: Param[] = paramFields.map((f) => ({
+    name: f.name,
+    type: paramType(f),
+  }));
+  const cols = paramFields.map((f) => f.name);
   return fill(createTmpl, {
     entityName,
     params: renderParams(params),
@@ -149,7 +133,6 @@ const generateDeleteOcc = (
 
 export const dialect: Dialect = {
   dialectName,
-  auditType,
   paramType,
   generateCreate,
   generateFindOne,

@@ -1,8 +1,7 @@
 import { fill } from "@deterministic-code/generators-common/fill";
 import { mapColumnType } from "../sql-dialect.ts";
 import {
-  hasSystemUuidColumn,
-  writableNonAuditFields,
+  createParamFields,
   aliasedColumns,
   pluralizeEntity,
 } from "./helpers.ts";
@@ -10,7 +9,6 @@ import {
   renderInParams,
   makeGenerateUpdate,
   type ProcField,
-  type ProcTable,
   type Param,
   type RenderCtx,
   type UpdateProcDialect,
@@ -27,26 +25,11 @@ import {
 } from "../../resources/procedures-mysql.ts";
 
 const dialectName = "mysql";
-const native = (type: string): string =>
-  mapColumnType(dialectName, { type });
-const auditType = native("datetime");
 const paramType = (field: ProcField): string =>
   mapColumnType(dialectName, field);
 
 const renderParams = (params: Param[]): string =>
   renderInParams(params, "IN ");
-
-const createProcParams = (table: ProcTable): Param[] => {
-  const writable = writableNonAuditFields(table);
-  return [
-    ...(hasSystemUuidColumn(table)
-      ? [{ name: "uuid", type: native("uuid") }]
-      : []),
-    ...writable.map((f) => ({ name: f.name, type: paramType(f) })),
-    { name: "created", type: auditType },
-    { name: "updated", type: auditType },
-  ];
-};
 
 const generateCreate = ({
   entityName,
@@ -54,22 +37,18 @@ const generateCreate = ({
   tableTok,
   pk,
 }: RenderCtx): string => {
-  const generatedId = !hasSystemUuidColumn(table);
-  const writable = writableNonAuditFields(table);
-  const cols = generatedId
-    ? [pk.name, ...writable.map((f) => f.name), "created", "updated"]
-    : ["uuid", ...writable.map((f) => f.name), "created", "updated"];
+  const paramFields = createParamFields(table);
+  const generatedId = pk.type === "uuid";
+  const insertFields = generatedId ? table.fields : paramFields;
+  const cols = insertFields.map((f) => f.name);
   const vals = generatedId
-    ? [
-        "new_id",
-        ...writable.map((f) => f.name),
-        "created",
-        "updated",
-      ]
+    ? insertFields.map((f) => (f.name === pk.name ? "new_id" : f.name))
     : cols;
   return fill(createTmpl, {
     entityName,
-    params: renderParams(createProcParams(table)),
+    params: renderParams(
+      paramFields.map((f) => ({ name: f.name, type: paramType(f) })),
+    ),
     generatedId,
     lastInsertId: pk.type === "biginteger" || pk.type === "integer",
     tableTok,
@@ -158,7 +137,6 @@ const generateDeleteOcc = (
 
 export const dialect: Dialect = {
   dialectName,
-  auditType,
   paramType,
   generateCreate,
   generateFindOne,

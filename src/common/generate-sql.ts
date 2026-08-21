@@ -278,9 +278,7 @@ const generateInitialMigration = (
   opts: DatasourceOptions,
 ): { up: SqlFile; down: SqlFile } => {
   const dialect = requireDialect(language);
-  const live = buildLiveTables(language, types, {
-    pluralizeTableNames: opts.pluralizeTableNames === true,
-  });
+  const live = buildLiveTables(types, opts.pluralizeTableNames === true);
   const preamble = renderPreamble(dialect);
   const seeds = seedSections(dialect, live, seedsByTable);
 
@@ -356,7 +354,6 @@ export const generateSqlFor = async (
   const dir = ctx.settings["paths.deterministic"];
   const initial = generateInitialMigration(key, data.types, data.seeds, {
     pluralizeTableNames: ds.pluralizeTableNames,
-    useOptimisticConcurrency: ds.useOptimisticConcurrency,
   });
   return [
     content(`${key}/migrations/${initial.up.path}`, initial.up.content),

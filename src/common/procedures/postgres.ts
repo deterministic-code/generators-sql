@@ -1,8 +1,7 @@
 import { mapColumnType } from "../sql-dialect.ts";
 import { fill } from "@deterministic-code/generators-common/fill";
 import {
-  hasSystemUuidColumn,
-  writableNonAuditFields,
+  createParamFields,
   aliasedColumns,
   pluralizeEntity,
 } from "./helpers.ts";
@@ -26,9 +25,6 @@ import {
 } from "../../resources/procedures-postgres.ts";
 
 const dialectName = "postgres";
-const native = (type: string): string =>
-  mapColumnType(dialectName, { type });
-const auditType = native("datetime");
 const paramType = (field: ProcField): string =>
   mapColumnType(dialectName, field);
 
@@ -38,23 +34,13 @@ const generateCreate = ({
   tableTok,
   pk,
 }: RenderCtx): string => {
-  const writable = writableNonAuditFields(table);
+  const paramFields = createParamFields(table);
   const pkType = paramType(pk);
-  const uuidParam: Param[] = hasSystemUuidColumn(table)
-    ? [{ name: "uuid", type: native("uuid") }]
-    : [];
-  const params: Param[] = [
-    ...uuidParam,
-    ...writable.map((f) => ({ name: f.name, type: paramType(f) })),
-    { name: "created", type: auditType },
-    { name: "updated", type: auditType },
-  ];
-  const cols = [
-    ...(hasSystemUuidColumn(table) ? ["uuid"] : []),
-    ...writable.map((f) => f.name),
-    "created",
-    "updated",
-  ];
+  const params: Param[] = paramFields.map((f) => ({
+    name: f.name,
+    type: paramType(f),
+  }));
+  const cols = paramFields.map((f) => f.name);
   return fill(createTmpl, {
     entityName,
     params: renderInParams(params),
@@ -144,7 +130,6 @@ const generateDeleteOcc = (
 
 export const dialect: Dialect = {
   dialectName,
-  auditType,
   paramType,
   generateCreate,
   generateFindOne,

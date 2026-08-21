@@ -1,38 +1,38 @@
-/** The CRUD stored-procedure driver shared by the postgres/mysql/sqlserver generators: the canonical operation set and routine names (`procedureSpecs`), the per-op fan-out (`generateProceduresFor`), and the dialect-parameterized param rendering + char-type mapping. The dialect-specific SQL bodies stay in each dialect module's `generate*` ops; everything that is the same across dialects lives here so the CREATE order and the down-migration DROP names cannot drift. */
 import { fill } from "@deterministic-code/generators-common/fill";
-import { q } from "../sql-dialect.ts";
 import {
   paramsTmpl,
   updateBodyTmpl,
 } from "../../resources/procedures-shared.ts";
+import { q } from "../sql-dialect.ts";
 import {
-  pkFieldOf,
-  writableNonAuditFields,
-  paramAlignWidth,
   pad,
+  paramAlignWidth,
+  pkFieldOf,
   pluralizeEntity,
+  updatedFieldOf,
+  writableNonAuditFields,
 } from "./helpers.ts";
 
-export interface ProcField {
+export type ProcField = {
   name: string;
   type: string;
-}
+};
 
-export interface ProcTable {
+export type ProcTable = {
   name: string;
   entityName: string;
   fields: ProcField[];
-}
+};
 
-export interface Param {
+export type Param = {
   name: string;
   type: string;
-}
+};
 
-export interface Variant {
+export type Variant = {
   occ?: boolean;
   byField?: string;
-}
+};
 
 type ProcOp =
   | "create"
@@ -45,30 +45,27 @@ type ProcOp =
   | "delete"
   | "deleteOcc";
 
-interface ProcSpec {
+type ProcSpec = {
   op: ProcOp;
   name: string;
   byField?: string;
-}
+};
 
-export interface RenderCtx {
+export type RenderCtx = {
   entityName: string;
   table: ProcTable;
   tableTok: string;
   pk: ProcField;
-}
+};
 
-export interface UpdateSpec {
-  pk: ProcField;
-  keyField: ProcField;
+export type UpdateSpec = {
   writable: ProcField[];
   name: string;
   params: Param[];
-}
+};
 
-export interface Dialect {
+export type Dialect = {
   dialectName: string;
-  auditType: string;
   paramType(field: ProcField): string;
   generateCreate(ctx: RenderCtx): string;
   generateFindOne(ctx: RenderCtx): string;
@@ -77,67 +74,94 @@ export interface Dialect {
   generateUpdate(ctx: RenderCtx, variant: Variant, spec: UpdateSpec): string;
   generateDelete(ctx: RenderCtx): string;
   generateDeleteOcc(ctx: RenderCtx, params: Param[]): string;
-}
+};
 
-interface ProcedureSpecOpts {
-  byFields?: string[];
-  occ?: boolean;
-}
-
-interface GenerateProceduresOpts {
-  byFields?: string[];
-  useOptimisticConcurrency?: boolean;
-}
-
-/** The ordered CRUD operations and their routine names for one entity — the single source both the per-dialect fan-out and `listProcedureNames` (down-migration DROPs) consume. */
-export function procedureSpecs(
+/** Ordered CRUD ops + routine names for one entity (CREATE bodies and DROP names). */
+export const procedureSpecs = (
   entityName: string,
-  { byFields = [], occ = false }: ProcedureSpecOpts = {},
-): ProcSpec[] {
+  byFields: string[],
+  occ: boolean,
+): ProcSpec[] => {
   const plural = pluralizeEntity(entityName);
-  const specs: ProcSpec[] = [
+  return [
     { op: "create", name: `create_${entityName}` },
     { op: "findOne", name: `find_${entityName}` },
     { op: "findAll", name: `find_${plural}` },
-  ];
-  for (const bf of byFields) {
-    specs.push({
-      op: "findBy",
+    ...byFields.map((bf) => ({
+      op: "findBy" as const,
       name: `find_${entityName}_by_${bf}`,
       byField: bf,
-    });
-  }
-  specs.push({ op: "update", name: `update_${entityName}` });
-  if (occ) {
-    specs.push({
-      op: "updateOcc",
-      name: `update_${entityName}_optimistic_concurrency`,
-    });
-  }
-  for (const bf of byFields) {
-    specs.push({
-      op: "updateBy",
+    })),
+    { op: "update", name: `update_${entityName}` },
+    ...(occ
+      ? [
+          {
+            op: "updateOcc" as const,
+            name: `update_${entityName}_optimistic_concurrency`,
+          },
+        ]
+      : []),
+    ...byFields.map((bf) => ({
+      op: "updateBy" as const,
       name: `update_${entityName}_by_${bf}`,
       byField: bf,
-    });
-  }
-  specs.push({ op: "delete", name: `delete_${entityName}` });
-  if (occ) {
-    specs.push({
-      op: "deleteOcc",
-      name: `delete_${entityName}_optimistic_concurrency`,
-    });
-  }
-  return specs;
-}
+    })),
+    { op: "delete", name: `delete_${entityName}` },
+    ...(occ
+      ? [
+          {
+            op: "deleteOcc" as const,
+            name: `delete_${entityName}_optimistic_concurrency`,
+          },
+        ]
+      : []),
+  ];
+};
 
-function variantForOp(op: string, byField?: string): Variant {
-  if (op === "updateOcc") return { occ: true };
-  if (op === "updateBy") return { byField };
-  return {};
-}
+const requireField = (
+  table: ProcTable,
+  byField: string | undefined,
+  procName: string,
+): ProcField => {
+  const field = table.fields.find((f) => f.name === byField);
+  if (!field) {
+    throw new Error(
+      `${procName}: field "${byField}" not declared on entity "${table.entityName}"`,
+    );
+  }
+  return field;
+};
 
-function renderOp(dialect: Dialect, spec: ProcSpec, ctx: RenderCtx): string {
+const updateSpec = (
+  dialect: Dialect,
+  table: ProcTable,
+  variant: Variant,
+  name: string,
+): UpdateSpec => {
+  const { occ = false, byField } = variant;
+  const key = byField ? requireField(table, byField, name) : pkFieldOf(table);
+  const updated = updatedFieldOf(table);
+  const writable = writableNonAuditFields(table).filter(
+    (f) => f.name !== byField,
+  );
+  return {
+    writable,
+    name,
+    params: [
+      { name: key.name, type: dialect.paramType(key) },
+      ...(occ
+        ? [{ name: "expected_updated", type: dialect.paramType(updated) }]
+        : []),
+      ...writable.map((f) => ({
+        name: f.name,
+        type: dialect.paramType(f),
+      })),
+      { name: "new_updated", type: dialect.paramType(updated) },
+    ],
+  };
+};
+
+const renderOp = (dialect: Dialect, spec: ProcSpec, ctx: RenderCtx): string => {
   switch (spec.op) {
     case "create":
       return dialect.generateCreate(ctx);
@@ -148,54 +172,57 @@ function renderOp(dialect: Dialect, spec: ProcSpec, ctx: RenderCtx): string {
     case "findBy":
       return dialect.generateFindBy(
         ctx,
-        requireField(
-          ctx.table,
-          spec.byField,
-          `find_${ctx.entityName}_by_${spec.byField}`,
-        ),
+        requireField(ctx.table, spec.byField, spec.name),
       );
     case "update":
     case "updateOcc":
     case "updateBy": {
-      const variant = variantForOp(spec.op, spec.byField);
+      const variant: Variant =
+        spec.op === "updateOcc"
+          ? { occ: true }
+          : spec.op === "updateBy"
+            ? { byField: spec.byField }
+            : {};
       return dialect.generateUpdate(
         ctx,
         variant,
-        updateSpec(dialect, ctx, variant),
+        updateSpec(dialect, ctx.table, variant, spec.name),
       );
     }
     case "delete":
       return dialect.generateDelete(ctx);
-    case "deleteOcc":
-      return dialect.generateDeleteOcc(
-        ctx,
-        deleteOccParams(dialect, pkFieldOf(ctx.table)),
-      );
+    case "deleteOcc": {
+      const { pk, table } = ctx;
+      return dialect.generateDeleteOcc(ctx, [
+        { name: pk.name, type: dialect.paramType(pk) },
+        {
+          name: "expected_updated",
+          type: dialect.paramType(updatedFieldOf(table)),
+        },
+      ]);
+    }
   }
-}
+};
 
-/** Fan a dialect module (its `generate*` op functions + `paramType`/`auditType`) over an entity's `procedureSpecs`, in canonical order. The driver owns every cross-dialect computation — the plan/params, the by-field lookup, the delete-occ params — passed to the dialect ops via a shared `ctx`, so the dialect modules hold only their unique SQL templates. */
-export function generateProceduresFor(
+export const generateProceduresFor = (
   dialect: Dialect,
   table: ProcTable,
-  opts: GenerateProceduresOpts = {},
-): string[] {
-  const entityName = table.entityName;
-  const byFields = opts.byFields ?? [];
-  const occ = opts.useOptimisticConcurrency === true;
+  byFields: string[],
+  occ: boolean,
+): string[] => {
   const ctx: RenderCtx = {
-    entityName,
+    entityName: table.entityName,
     table,
     tableTok: q(dialect.dialectName, table.name),
     pk: pkFieldOf(table),
   };
-  return procedureSpecs(entityName, { byFields, occ }).map((spec) =>
+  return procedureSpecs(table.entityName, byFields, occ).map((spec) =>
     renderOp(dialect, spec, ctx),
   );
-}
+};
 
-/** Render aligned `IN`/`@`/bare procedure params — `prefix` is the dialect's param marker (`""` postgres, `"IN "` mysql, `"@"` sqlserver). */
-export function renderInParams(params: Param[], prefix = ""): string {
+/** Aligned `IN`/`@`/bare params; `prefix` is `""` (postgres), `"IN "` (mysql), `"@"` (sqlserver). */
+export const renderInParams = (params: Param[], prefix = ""): string => {
   const width = paramAlignWidth(params);
   return fill(paramsTmpl, {
     params: params.map((p, i) => ({
@@ -205,60 +232,26 @@ export function renderInParams(params: Param[], prefix = ""): string {
       last: i === params.length - 1,
     })),
   }).trimEnd();
-}
+};
 
-/** Resolve a by-field column, throwing the standard "not declared" error keyed by the procedure name. */
-function requireField(
-  table: ProcTable,
-  byField: string | undefined,
-  procName: string,
-): ProcField {
-  const field = table.fields.find((f) => f.name === byField);
-  if (!field) {
-    throw new Error(
-      `${procName}: field "${byField}" not declared on entity "${table.entityName}"`,
-    );
-  }
-  return field;
-}
-
-interface UpdateWhereParts {
-  byField(byField: string): string;
-  occ(pkName: string): string;
-  plain(pkName: string): string;
-}
-
-/** Select the update procedure's WHERE predicate for a `Variant`: the by-field key, the optimistic-concurrency guard, or the plain primary-key match. */
-function updateWhere(
-  variant: Variant,
-  pk: ProcField,
-  parts: UpdateWhereParts,
-): string {
-  if (variant.byField) return parts.byField(variant.byField);
-  if (variant.occ === true) return parts.occ(pk.name);
-  return parts.plain(pk.name);
-}
-
-/** The per-dialect rendering an update procedure varies on: the WHERE column reference (`colRef`, alias-qualified where the dialect aliases its UPDATE), the SET target (`setLhs`, always bare on postgres which forbids an alias there), the parameter reference (`argRef` — the `@`/fn-qualified marker or the mysql datetime CAST), and the `wrap` that skins the assembled UPDATE body in the dialect's CREATE header + rowcount tail. */
-export interface UpdateProcDialect {
+export type UpdateProcDialect = {
   colRef(col: string): string;
   setLhs(col: string): string;
   argRef(col: string, procName: string): string;
   wrap(ctx: RenderCtx, spec: UpdateSpec, updateBody: string): string;
-}
+};
 
-/** Bind a dialect's update rendering into the `generateUpdate` op the `Dialect` interface requires: assemble the shared WHERE-variant predicate and the `SET col = arg` list, then hand them to the dialect's `wrap` for its proc skeleton. Each dialect module exports `makeGenerateUpdate(updateDialect)`, so the assembly stays the single copy. Direct assignment (no COALESCE) — PATCH-merge happens in the service/repository layer, and COALESCE in-proc made setting a nullable column to NULL impossible. */
-export function makeGenerateUpdate(
-  d: UpdateProcDialect,
-): (ctx: RenderCtx, variant: Variant, spec: UpdateSpec) => string {
-  return (ctx, variant, spec) => {
+/** Direct SET (no COALESCE) — PATCH-merge is in the service layer; COALESCE blocked SQL NULL. */
+export const makeGenerateUpdate =
+  (d: UpdateProcDialect) =>
+  (ctx: RenderCtx, variant: Variant, spec: UpdateSpec): string => {
     const argOf = (col: string) => d.argRef(col, spec.name);
-    const where = updateWhere(variant, spec.pk, {
-      byField: (bf) => `${d.colRef(bf)} = ${argOf(bf)}`,
-      occ: (n) =>
-        `${d.colRef(n)} = ${argOf(n)} AND ${d.colRef("updated")} = ${argOf("expected_updated")}`,
-      plain: (n) => `${d.colRef(n)} = ${argOf(n)}`,
-    });
+    const pk = ctx.pk.name;
+    const where = variant.byField
+      ? `${d.colRef(variant.byField)} = ${argOf(variant.byField)}`
+      : variant.occ === true
+        ? `${d.colRef(pk)} = ${argOf(pk)} AND ${d.colRef("updated")} = ${argOf("expected_updated")}`
+        : `${d.colRef(pk)} = ${argOf(pk)}`;
     const sets = [
       ...spec.writable.map((f) => ({
         lhs: d.setLhs(f.name),
@@ -271,53 +264,16 @@ export function makeGenerateUpdate(
         rhs: argOf("new_updated"),
       },
     ];
-    const updateBody = fill(updateBodyTmpl, {
-      sets: sets.map((s, i) => ({
-        ...s,
-        first: i === 0,
-        last: i === sets.length - 1,
-      })),
-      where,
-    }).trimEnd();
-    return d.wrap(ctx, spec, updateBody);
+    return d.wrap(
+      ctx,
+      spec,
+      fill(updateBodyTmpl, {
+        sets: sets.map((s, i) => ({
+          ...s,
+          first: i === 0,
+          last: i === sets.length - 1,
+        })),
+        where,
+      }).trimEnd(),
+    );
   };
-}
-
-/** The dialect-independent shape of an update procedure — routine name, key column, writable columns, and the ordered param list — built from the render `ctx` and the dialect's `paramType`/`auditType`. Covers plain, optimistic-concurrency, and by-field variants; the SQL body + WHERE stay in the caller. */
-function updateSpec(
-  dialect: Dialect,
-  { entityName, table }: RenderCtx,
-  variant: Variant,
-): UpdateSpec {
-  const { occ = false, byField } = variant;
-  const pk = pkFieldOf(table);
-  const keyField = byField
-    ? requireField(table, byField, `update_${entityName}_by_${byField}`)
-    : pk;
-  const writable = writableNonAuditFields(table).filter(
-    (f: ProcField) => f.name !== byField,
-  );
-  const name = byField
-    ? `update_${entityName}_by_${byField}`
-    : occ
-      ? `update_${entityName}_optimistic_concurrency`
-      : `update_${entityName}`;
-  const params = [
-    { name: keyField.name, type: dialect.paramType(keyField) },
-    ...(occ ? [{ name: "expected_updated", type: dialect.auditType }] : []),
-    ...writable.map((f: ProcField) => ({
-      name: f.name,
-      type: dialect.paramType(f),
-    })),
-    { name: "new_updated", type: dialect.auditType },
-  ];
-  return { pk, keyField, writable, name, params };
-}
-
-/** The two params of an optimistic-concurrency delete: the pk and the `expected_updated` guard. */
-function deleteOccParams(dialect: Dialect, pk: ProcField): Param[] {
-  return [
-    { name: pk.name, type: dialect.paramType(pk) },
-    { name: "expected_updated", type: dialect.auditType },
-  ];
-}

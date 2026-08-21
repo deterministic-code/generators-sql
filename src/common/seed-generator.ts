@@ -1,168 +1,113 @@
 import { createHash } from "node:crypto";
-import { sqlStringLiteral } from "../base-type-converter.ts";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type {
   DatasourceField,
   SeedRow,
   SeedValue,
 } from "@deterministic-code/generators-common/specification";
-import { dialectConverter, q, sqlDefault, type SqlDialect } from "./sql-dialect.ts";
-import {
-  type LiveTable,
-} from "./sql-schema.ts";
-import {
-  insertSeedTmpl,
-} from "../resources/sql.ts";
+import { sqlStringLiteral } from "../base-type-converter.ts";
+import { insertSeedTmpl } from "../resources/sql.ts";
 import { renderSeedAfter, renderSeedBefore } from "./render-ddl.ts";
-
-type SeedCell = {
-  row: Record<string, unknown>;
-  col: string;
-};
+import {
+  dialectConverter,
+  q,
+  sqlDefault,
+  type SqlDialect,
+} from "./sql-dialect.ts";
+import type { LiveTable } from "./sql-schema.ts";
 
 const SEED_UUID_NAMESPACE = "9b3a8e6c-2f1d-4a5b-8c9d-1e2f3a4b5c6d";
 
-const SEED_VALUE: Record<
-  string,
-  (dialect: SqlDialect, value: SeedValue) => string
-> = {
-  boolean: (dialect, value) =>
-    dialectConverter(dialect).conversions.boolean.defaults.Boolean(
-      value ? "true" : "false",
-    ),
-  number: (_dialect, value) => String(value),
-  reference: (_dialect, value) => String(value),
-};
+const pkType = (table: LiveTable): string =>
+  table.fields.find((f) => f.name === table.primaryKeyColumn)?.type ??
+  "integer";
 
-const SEED_ID: Record<string, (source: string, id: number) => string> = {
-  uuid: (source, id) => sqlStringLiteral(seedUuid(source, id)),
-  string: (_source, id) => sqlStringLiteral(String(id)),
-};
-
-const uuidStringToBytes = (uuid: string): Buffer => {
-  const hex = uuid.replace(/-/g, "");
-  const bytes = Buffer.alloc(16);
-  for (let i = 0; i < 16; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-};
-
-const bytesToUuidString = (bytes: Buffer): string => {
-  const hex = Buffer.from(bytes).toString("hex");
+const seedUuid = (tableName: string, id: number): string => {
+  const bytes = Buffer.from(
+    createHash("sha1")
+      .update(
+        Buffer.concat([
+          Buffer.from(SEED_UUID_NAMESPACE.replace(/-/g, ""), "hex"),
+          Buffer.from(`${tableName}:${id}`, "utf8"),
+        ]),
+      )
+      .digest()
+      .subarray(0, 16),
+  );
+  bytes[6] = (bytes[6] & 0x0f) | 0x50;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 };
 
-const seedUuid = (tableName: string, id: number): string => {
-  const ns = uuidStringToBytes(SEED_UUID_NAMESPACE);
-  const name = Buffer.from(`${tableName}:${id}`, "utf8");
-  const hash = createHash("sha1")
-    .update(Buffer.concat([ns, name]))
-    .digest();
-  const bytes = Buffer.from(hash.slice(0, 16));
-  bytes[6] = (bytes[6] & 0x0f) | 0x50;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  return bytesToUuidString(bytes);
+const renderValue = (
+  dialect: SqlDialect,
+  field: DatasourceField,
+  value: SeedValue,
+): string => {
+  if (field.type === "boolean") {
+    return dialectConverter(dialect).conversions.boolean.defaults.Boolean(
+      value ? "true" : "false",
+    );
+  }
+  if (field.type === "number" || field.type === "reference") {
+    return String(value);
+  }
+  return sqlStringLiteral(value);
 };
 
-/** INSERT seed rows (and sequenced-id wraps) for one dialect. */
-class SeedGenerator {
-  readonly dialect: SqlDialect;
+const idValue = (table: LiveTable, id: number): string => {
+  const t = pkType(table);
+  if (t === "uuid") return sqlStringLiteral(seedUuid(table.name, id));
+  if (t === "string") return sqlStringLiteral(String(id));
+  return String(id);
+};
 
-  constructor(dialect: SqlDialect) {
-    this.dialect = dialect;
+const colValue = (
+  dialect: SqlDialect,
+  field: DatasourceField | undefined,
+  value: SeedValue | undefined,
+): string => {
+  if (!field) return "NULL";
+  if (value === null || value === undefined) {
+    return sqlDefault(dialect, field) ?? "NULL";
   }
+  return renderValue(dialect, field, value);
+};
 
-  generate(table: LiveTable, seeds: SeedRow[]): string[] {
-    if (seeds.length === 0) return [];
-    const out: string[] = [];
-    const pkType =
-      table.fields.find((f) => f.name === table.primaryKeyColumn)?.type ??
-      "integer";
-    const sequenced = pkType !== "uuid" && pkType !== "string";
-    const quoted = q(this.dialect, table.tableName);
+const colsForRow = (
+  table: LiveTable,
+  row: Record<string, SeedValue>,
+): string[] => {
+  const names = new Set(table.fields.map((f) => f.name));
+  return [
+    ...(names.has("id") ? ["id"] : []),
+    ...(names.has("uuid") ? ["uuid"] : []),
+    ...Object.keys(row).filter((k) => k !== "id" && k !== "uuid"),
+  ];
+};
 
-    if (sequenced) {
-      const before = renderSeedBefore(this.dialect, quoted);
-      if (before) out.push(before);
-    }
-    for (const seed of seeds) {
-      out.push(this.insert(table, seed));
-    }
-    if (sequenced) {
-      const after = renderSeedAfter(
-        this.dialect,
-        table.tableName,
-        quoted,
-      );
-      if (after) out.push(after);
-    }
-    return out;
-  }
-
-  private insert(table: LiveTable, seed: SeedRow): string {
-    const { id, row } = seed;
-    const { cols, fieldByName } = this.colsForRow(table, row);
-    const values = cols.map((c) => {
-      if (c === "id") return this.idValue(table, table.name, id);
-      if (c === "uuid") return sqlStringLiteral(seedUuid(table.name, id));
-      return this.colValue(fieldByName.get(c), { row, col: c });
-    });
-    return fill(insertSeedTmpl, {
-      quotedTable: q(this.dialect, table.tableName),
-      colList: cols.map((c) => q(this.dialect, c)).join(", "),
-      valueList: values.join(", "),
-    }).trimEnd();
-  }
-
-  private colsForRow(
-    table: LiveTable,
-    row: Record<string, unknown>,
-  ): { cols: string[]; fieldByName: Map<string, DatasourceField> } {
-    const fieldNames = new Set(table.fields.map((f) => f.name));
-    const colNames = new Set<string>();
-    if (fieldNames.has("id")) colNames.add("id");
-    if (fieldNames.has("uuid")) colNames.add("uuid");
-    for (const k of Object.keys(row)) {
-      if (k !== "id" && k !== "uuid") colNames.add(k);
-    }
-    return {
-      cols: Array.from(colNames),
-      fieldByName: new Map(
-        table.fields.map((f): [string, DatasourceField] => [f.name, f]),
-      ),
-    };
-  }
-
-  private colValue(
-    field: DatasourceField | undefined,
-    cell: SeedCell,
-  ): string | null {
-    const { row, col } = cell;
-    if (col === "id") return null;
-    if (!field) return "NULL";
-    const v = Object.prototype.hasOwnProperty.call(row, col) ? row[col] : null;
-    if (v === null || v === undefined) {
-      const dv = sqlDefault(this.dialect, field);
-      return dv !== null ? dv : "NULL";
-    }
-    return this.renderValue(field, v as SeedValue);
-  }
-
-  private renderValue(field: DatasourceField, value: SeedValue): string {
-    if (value === null || value === undefined) return "NULL";
-    const render = SEED_VALUE[field.type];
-    return render ? render(this.dialect, value) : sqlStringLiteral(value);
-  }
-
-  private idValue(table: LiveTable, source: string, id: number): string {
-    const pkType =
-      table.fields.find((f) => f.name === table.primaryKeyColumn)?.type ??
-      "integer";
-    const render = SEED_ID[pkType];
-    return render ? render(source, id) : String(id);
-  }
-}
+const insert = (
+  dialect: SqlDialect,
+  table: LiveTable,
+  seed: SeedRow,
+): string => {
+  const cols = colsForRow(table, seed.row);
+  const values = cols.map((c) => {
+    if (c === "id") return idValue(table, seed.id);
+    if (c === "uuid") return sqlStringLiteral(seedUuid(table.name, seed.id));
+    return colValue(
+      dialect,
+      table.fields.find((f) => f.name === c),
+      seed.row[c],
+    );
+  });
+  return fill(insertSeedTmpl, {
+    quotedTable: q(dialect, table.tableName),
+    colList: cols.map((c) => q(dialect, c)).join(", "),
+    valueList: values.join(", "),
+  }).trimEnd();
+};
 
 /** Per-table seed SQL blocks for the initial migration (`-- Seeds: <table>`). */
 export const seedSections = (
@@ -170,12 +115,26 @@ export const seedSections = (
   tables: LiveTable[],
   seeds: Map<string, SeedRow[]>,
 ): string[] => {
-  const gen = new SeedGenerator(dialect);
   const lines: string[] = [];
-  for (const t of tables) {
-    const sql = gen.generate(t, seeds.get(t.name) ?? []);
-    if (sql.length === 0) continue;
-    lines.push(`-- Seeds: ${t.tableName}`, sql.join("\n"), "");
+  for (const table of tables) {
+    const rows = seeds.get(table.name) ?? [];
+    if (rows.length === 0) continue;
+    const quoted = q(dialect, table.tableName);
+    const t = pkType(table);
+    const sequenced = t !== "uuid" && t !== "string";
+    const before = sequenced ? renderSeedBefore(dialect, quoted) : "";
+    const after = sequenced
+      ? renderSeedAfter(dialect, table.tableName, quoted)
+      : "";
+    lines.push(
+      `-- Seeds: ${table.tableName}`,
+      [
+        ...(before ? [before] : []),
+        ...rows.map((s) => insert(dialect, table, s)),
+        ...(after ? [after] : []),
+      ].join("\n"),
+      "",
+    );
   }
   return lines;
 };

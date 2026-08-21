@@ -33,28 +33,32 @@ export function writableNonAuditFields(table: ProcTable): ProcField[] {
   );
 }
 
-export function hasSystemUuidColumn(table: ProcTable): boolean {
-  return table.fields.some((f) => f.name === "uuid");
-}
-
-/** The ordered column list for an entity's SELECT/INSERT: pk, the system `uuid` (when present), the writable columns, then `created`/`updated`. */
-function allColumnNames(table: ProcTable): string[] {
-  const pk = pkFieldOf(table);
+/** CREATE IN-params from expanded columns, in the stored-procedure call order: `uuid` (if present), writable fields, `created`, `updated`. */
+export const createParamFields = (table: ProcTable): ProcField[] => {
+  const field = (name: string): ProcField[] => {
+    const found = table.fields.find((f) => f.name === name);
+    return found ? [found] : [];
+  };
   return [
-    pk.name,
-    ...(hasSystemUuidColumn(table) ? ["uuid"] : []),
-    ...writableNonAuditFields(table).map((f) => f.name),
-    "created",
-    "updated",
+    ...field("uuid"),
+    ...writableNonAuditFields(table),
+    ...field("created"),
+    ...field("updated"),
   ];
-}
+};
 
-/** `allColumnNames` qualified with a table alias (default `t`), for the dialects whose SELECTs alias the table. */
-export function aliasedColumns(table: ProcTable, alias = "t"): string {
-  return allColumnNames(table)
-    .map((c) => `${alias}.${c}`)
-    .join(", ");
-}
+/** The expanded `updated` column — present on every table that gets procedures. */
+export const updatedFieldOf = (table: ProcTable): ProcField => {
+  const field = table.fields.find((f) => f.name === "updated");
+  if (!field) {
+    throw new Error("procedure table is missing expanded `updated` column");
+  }
+  return field;
+};
+
+/** Expanded columns qualified with a table alias (default `t`). */
+export const aliasedColumns = (table: ProcTable, alias = "t"): string =>
+  table.fields.map((f) => `${alias}.${f.name}`).join(", ");
 
 export function paramAlignWidth(params: { name: string }[]): number {
   return params.reduce((m, p) => Math.max(m, p.name.length), 0);

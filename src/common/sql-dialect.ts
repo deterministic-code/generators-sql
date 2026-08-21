@@ -10,7 +10,7 @@ import * as postgres from "../postgres/base-type-converter.ts";
 import * as sqlite from "../sqlite/base-type-converter.ts";
 import * as sqlserver from "../sqlserver/base-type-converter.ts";
 
-export const SQL_DIALECTS = [
+const SQL_DIALECTS = [
   "sqlite",
   "mysql",
   "postgres",
@@ -20,14 +20,13 @@ export const SQL_DIALECTS = [
 
 export type SqlDialect = (typeof SQL_DIALECTS)[number];
 
-export type DialectTypeConverter = {
+type Pack = {
   sqlConversion: SqlConversion;
   conversions: Record<string, NativeInfo>;
-  toNative: (specType: string) => string;
   toColumnType: (field: ConverterField) => string;
 };
 
-const DIALECTS: Record<SqlDialect, DialectTypeConverter> = {
+const DIALECTS: Record<SqlDialect, Pack> = {
   sqlite,
   mysql,
   postgres,
@@ -35,44 +34,35 @@ const DIALECTS: Record<SqlDialect, DialectTypeConverter> = {
   oracle,
 };
 
-export const dialectConverter = (dialect: string): DialectTypeConverter => {
+export const dialectConverter = (dialect: string): Pack => {
   const pack = DIALECTS[dialect as SqlDialect];
   if (pack === undefined) {
-    throw new Error(`Unknown dialect "${dialect}"`);
+    throw new Error(
+      `Unknown SQL dialect "${dialect}". Valid: ${SQL_DIALECTS.join(", ")}.`,
+    );
   }
   return pack;
 };
 
-const BACKEND_DATASOURCES = "backend.datasources";
+export const requireDialect = (language: string): SqlDialect => {
+  dialectConverter(language);
+  return language as SqlDialect;
+};
 
 /** Dialects listed in `backend.datasources`. */
 export const dialectsFromSettings = (
   settings: Record<string, string>,
 ): SqlDialect[] => {
-  const raw = settings[BACKEND_DATASOURCES];
+  const raw = settings["backend.datasources"];
   if (raw === undefined || raw === "") return ["sqlite"];
   const out: SqlDialect[] = [];
-  for (const item of raw.split(",")) {
-    const name = item.trim();
-    if (name === "") continue;
-    if (DIALECTS[name as SqlDialect] === undefined) {
-      throw new Error(
-        `Unknown SQL dialect "${name}" in ${BACKEND_DATASOURCES}. Valid: ${SQL_DIALECTS.join(", ")}.`,
-      );
-    }
-    const key = name as SqlDialect;
-    if (!out.includes(key)) out.push(key);
+  for (const name of raw.split(",")) {
+    const key = name.trim();
+    if (key === "") continue;
+    const dialect = requireDialect(key);
+    if (!out.includes(dialect)) out.push(dialect);
   }
   return out.length > 0 ? out : ["sqlite"];
-};
-
-export const requireDialect = (language: string): SqlDialect => {
-  if (DIALECTS[language as SqlDialect] === undefined) {
-    throw new Error(
-      `Unknown SQL dialect "${language}". Valid: ${SQL_DIALECTS.join(", ")}.`,
-    );
-  }
-  return language as SqlDialect;
 };
 
 export const q = (dialect: string, ident: string): string => {
@@ -80,23 +70,10 @@ export const q = (dialect: string, ident: string): string => {
   return `${quoteLeft}${ident}${quoteRight}`;
 };
 
-/** sqlite/oracle have no stored procedures — SP generators skip them. */
-export const supportsProcedures = (dialect: string): boolean =>
-  dialectConverter(dialect).sqlConversion.supportsProcedures;
-
 export const mapColumnType = (
   dialect: string,
   field: ConverterField,
-): string => {
-  const pack = dialectConverter(dialect);
-  if (field.type === "reference" && field.referencesType !== undefined) {
-    return mapColumnType(dialect, {
-      type: field.referencesType,
-      size: field.referencesSize,
-    });
-  }
-  return pack.toColumnType(field);
-};
+): string => dialectConverter(dialect).toColumnType(field);
 
 export const sqlDefault = (
   dialect: string,

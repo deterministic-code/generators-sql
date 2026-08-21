@@ -1,57 +1,39 @@
 import type { ExpandedDatasourceType } from "@deterministic-code/generators-common/specification";
 import { effectiveTableName } from "./effective-table-name.ts";
-import { requireDialect } from "./sql-dialect.ts";
 
 export type DatasourceOptions = {
   pluralizeTableNames?: boolean;
-  useStoredProcedures?: boolean;
-  useOptimisticConcurrency?: boolean;
 };
 
-/** On unless the flattened setting is the string `"false"`. */
-const enabledByDefault = (raw: string | undefined): boolean =>
-  String(raw) !== "false";
-
-/** Opt-in: on only when the flattened value stringifies to `"true"`. */
-const enabledWhenTrue = (raw: string | undefined): boolean =>
-  String(raw) === "true";
-
+/** Flattened `datasource.*` flags. On unless `"false"`; stored procedures are opt-in `"true"`. */
 export const datasourceSettings = (settings: Record<string, string>) => ({
-  pluralizeTableNames: enabledByDefault(
-    settings["datasource.pluralize_datatable_names"],
-  ),
-  useStoredProcedures: enabledWhenTrue(
-    settings["datasource.use_stored_procedures"],
-  ),
-  useOptimisticConcurrency: enabledByDefault(
-    settings["datasource.use_optimistic_concurrency"],
-  ),
-});
-
-export const datasourceSettingsFor = (opts: DatasourceOptions = {}) => ({
-  pluralizeTableNames: opts.pluralizeTableNames ?? true,
-  useStoredProcedures: opts.useStoredProcedures ?? false,
-  useOptimisticConcurrency: opts.useOptimisticConcurrency ?? true,
+  pluralizeTableNames:
+    String(settings["datasource.pluralize_datatable_names"]) !== "false",
+  useStoredProcedures:
+    String(settings["datasource.use_stored_procedures"]) === "true",
+  useOptimisticConcurrency:
+    String(settings["datasource.use_optimistic_concurrency"]) !== "false",
 });
 
 export type LiveTable = ExpandedDatasourceType & { tableName: string };
 
-export const hasAuditColumns = (table: { fields: { name: string }[] }): boolean =>
+export const hasAuditColumns = (table: {
+  fields: { name: string }[];
+}): boolean =>
   table.fields.some((f) => f.name === "created") &&
   table.fields.some((f) => f.name === "updated");
 
 export type SqlFile = { path: string; content: string };
 
 const topoSort = (tables: LiveTable[]): LiveTable[] => {
-  const byName = new Map(tables.map((t) => [t.name, t]));
+  const names = new Set(tables.map((t) => t.name));
   const deps = new Map(
     tables.map((t) => [
       t.name,
       new Set(
         t.fields.flatMap((f) => {
-          if (!f.references) return [];
-          const dep = String(f.references).split(".")[0];
-          return byName.has(dep) && dep !== t.name ? [dep] : [];
+          const dep = f.references?.split(".")[0];
+          return dep && names.has(dep) && dep !== t.name ? [dep] : [];
         }),
       ),
     ]),
@@ -59,16 +41,12 @@ const topoSort = (tables: LiveTable[]): LiveTable[] => {
   const out: LiveTable[] = [];
   const done = new Set<string>();
   const pending = tables.slice();
-  let safety = pending.length * pending.length + 10;
-  while (pending.length > 0 && safety-- > 0) {
+  while (pending.length > 0) {
     const idx = pending.findIndex((t) =>
       [...(deps.get(t.name) ?? [])].every((d) => done.has(d)),
     );
     if (idx === -1) {
-      for (const t of pending) {
-        out.push(t);
-        done.add(t.name);
-      }
+      out.push(...pending);
       break;
     }
     const [t] = pending.splice(idx, 1);
@@ -78,20 +56,16 @@ const topoSort = (tables: LiveTable[]): LiveTable[] => {
   return out;
 };
 
-/** Shared by proc + migration generators — skipMigrations filter + topo-sort. */
+/** Skip `skipMigrations` tables, attach physical names, parent-before-child order. */
 export const buildLiveTables = (
-  language: string,
   types: ExpandedDatasourceType[],
-  opts: DatasourceOptions = {},
-): LiveTable[] => {
-  requireDialect(language);
-  const pluralize = opts.pluralizeTableNames === true;
-  return topoSort(
+  pluralizeTableNames: boolean,
+): LiveTable[] =>
+  topoSort(
     types
       .filter((t) => !t.skipMigrations)
       .map((t) => ({
         ...t,
-        tableName: effectiveTableName(t.name, pluralize),
+        tableName: effectiveTableName(t.name, pluralizeTableNames),
       })),
   );
-};
