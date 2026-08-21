@@ -1,6 +1,6 @@
-DROP PROCEDURE IF EXISTS create_{{entityName}};
+DROP PROCEDURE IF EXISTS {{routineName}};
 GO
-CREATE PROCEDURE create_{{entityName}}(
+CREATE PROCEDURE {{routineName}}(
 {{{params}}}
 )
 BEGIN
@@ -18,7 +18,7 @@ BEGIN
   SELECT LAST_INSERT_ID() AS {{pkName}};
 {{/lastInsertId}}
 {{^lastInsertId}}
-  SELECT t.{{pkName}} AS {{pkName}} FROM {{tableTok}} t WHERE t.uuid = uuid;
+  SELECT t.{{pkName}} AS {{pkName}} FROM {{tableTok}} t WHERE t.{{uuidCol}} = {{uuidCol}};
 {{/lastInsertId}}
 {{/generatedId}}
 END;

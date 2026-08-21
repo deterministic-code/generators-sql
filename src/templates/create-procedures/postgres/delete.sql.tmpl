@@ -1,8 +1,8 @@
-CREATE OR REPLACE FUNCTION delete_{{entityName}}({{pkName}} {{pkType}}) RETURNS INT LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION {{routineName}}({{pkName}} {{pkType}}) RETURNS INT LANGUAGE plpgsql AS $$
 DECLARE
   affected INT;
 BEGIN
-  DELETE FROM {{tableTok}} t WHERE t.{{pkName}} = delete_{{entityName}}.{{pkName}};
+  DELETE FROM {{tableTok}} t WHERE t.{{pkName}} = {{routineName}}.{{pkName}};
   GET DIAGNOSTICS affected = ROW_COUNT;
   RETURN affected;
 END;

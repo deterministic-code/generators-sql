@@ -3,6 +3,7 @@ import type { GenerateContext } from "@deterministic-code/generators-common/gene
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { DATASOURCE_TYPES_YAML } from "@deterministic-code/generators-common/specification";
 import { DeterministicParser } from "@deterministic-code/generators-common/specification-parser";
+import { createCasing } from "./default-casing.ts";
 import { byFieldsFromDatasource } from "./datasource-by-fields.ts";
 import type { SqlDialect } from "./sql-dialect.ts";
 import {
@@ -60,9 +61,8 @@ export const generateProceduresForDialect = async (
   await ctx.reader.read(DATASOURCE_TYPES_YAML);
   const types = (await DeterministicParser(ctx.reader).parse(ctx.settings))
     .expandedDatasourceTypes;
-  const tables = buildLiveTables(types, ds.pluralizeTableNames).filter(
-    hasAuditColumns,
-  );
+  const casing = createCasing(ctx.settings);
+  const tables = buildLiveTables(types, casing).filter(hasAuditColumns);
   if (tables.length === 0) return [];
 
   const occ = ds.useOptimisticConcurrency;
@@ -77,9 +77,9 @@ export const generateProceduresForDialect = async (
     return {
       body: [
         `-- ${t.name}`,
-        ...generateProceduresFor(pack.dialect, table, fields, occ),
+        ...generateProceduresFor(pack.dialect, table, fields, occ, casing),
       ].join("\n\n"),
-      drops: procedureSpecs(t.name, fields, occ).map((spec) =>
+      drops: procedureSpecs(t.name, fields, occ, casing).map((spec) =>
         fill(dropRoutineTmpl, { verb: pack.verb, name: spec.name }).trimEnd(),
       ),
     };

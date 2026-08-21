@@ -1,1 +1,1 @@
-SELECT setval(pg_get_serial_sequence('{{tableName}}', 'id'), (SELECT MAX("id") FROM {{quotedTable}}));
+SELECT setval(pg_get_serial_sequence('{{tableName}}', '{{idColumn}}'), (SELECT MAX({{quotedId}}) FROM {{quotedTable}}));

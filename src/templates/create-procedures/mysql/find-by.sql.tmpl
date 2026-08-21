@@ -1,6 +1,6 @@
-DROP PROCEDURE IF EXISTS find_{{entityName}}_by_{{byField}};
+DROP PROCEDURE IF EXISTS {{routineName}};
 GO
-CREATE PROCEDURE find_{{entityName}}_by_{{byField}}(IN {{byField}} {{fieldType}})
+CREATE PROCEDURE {{routineName}}(IN {{byField}} {{fieldType}})
 BEGIN
   SELECT {{aliasedCols}} FROM {{tableTok}} t WHERE t.{{byField}} = {{byField}};
 END;

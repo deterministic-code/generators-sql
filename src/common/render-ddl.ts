@@ -1,20 +1,26 @@
 import { fill } from "@deterministic-code/generators-common/fill";
 import { dialectSql } from "../resources/sql.ts";
+import type { PackCasing } from "./default-casing.ts";
 import { dialectConverter, q, type SqlDialect } from "./sql-dialect.ts";
 
 type TriggerTable = {
   name: string;
+  tableName: string;
   fields: { name: string; isPrimaryKey?: boolean }[];
 };
 
-const triggerTokens = (dialect: SqlDialect, table: TriggerTable) => {
+const triggerTokens = (
+  dialect: SqlDialect,
+  table: TriggerTable,
+  casing: PackCasing,
+) => {
   const pk = table.fields.find((f) => f.isPrimaryKey === true);
   return {
-    quotedTable: q(dialect, table.name),
-    quotedTrigger: q(dialect, `trg_${table.name}_updated_at`),
-    quotedUpdated: q(dialect, "updated"),
-    quotedPk: q(dialect, pk ? pk.name : "id"),
-    quotedId: q(dialect, "id"),
+    quotedTable: q(dialect, table.tableName),
+    quotedTrigger: q(dialect, casing.triggerName(table.name)),
+    quotedUpdated: q(dialect, casing.columnName("updated")),
+    quotedPk: q(dialect, casing.columnName(pk ? pk.name : "id")),
+    quotedId: q(dialect, casing.columnName("id")),
     utcNow: dialectConverter(dialect).conversions.datetime.defaults.UtcNow(""),
   };
 };
@@ -30,8 +36,12 @@ export const renderDropTable = (
 export const renderUpdatedTrigger = (
   dialect: SqlDialect,
   table: TriggerTable,
+  casing: PackCasing,
 ): string =>
-  fill(dialectSql[dialect].updatedTrigger, triggerTokens(dialect, table)).trimEnd();
+  fill(
+    dialectSql[dialect].updatedTrigger,
+    triggerTokens(dialect, table, casing),
+  ).trimEnd();
 
 export const renderPreamble = (dialect: SqlDialect): string => {
   const tmpl = dialectSql[dialect].preamble;
@@ -50,7 +60,11 @@ export const renderSeedAfter = (
   dialect: SqlDialect,
   tableName: string,
   quotedTable: string,
+  idColumn: string,
+  quotedId: string,
 ): string => {
   const tmpl = dialectSql[dialect].seedAfter;
-  return tmpl ? fill(tmpl, { tableName, quotedTable }).trimEnd() : "";
+  return tmpl
+    ? fill(tmpl, { tableName, quotedTable, idColumn, quotedId }).trimEnd()
+    : "";
 };
