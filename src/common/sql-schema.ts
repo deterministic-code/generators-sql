@@ -1,4 +1,4 @@
-import type { DatasourceType } from "@deterministic-code/generators-common/specification";
+import type { DatasourceType } from "@deterministic-code/deterministic-specifications-typescript/parser";
 import type { PackCasing } from "./default-casing.ts";
 
 /** Flattened `datasource.*` flags. On unless `"false"`; stored procedures are opt-in `"true"`. */

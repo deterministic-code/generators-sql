@@ -3,7 +3,7 @@
 import {
   uniqueLookupFields,
   type DatasourceType,
-} from "@deterministic-code/generators-common/specification";
+} from "@deterministic-code/deterministic-specifications-typescript/parser";
 
 export const byFieldsFromDatasource = (
   types: DatasourceType[],

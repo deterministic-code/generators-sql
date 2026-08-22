@@ -1,8 +1,8 @@
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { DATASOURCE_TYPES_YAML } from "@deterministic-code/generators-common/specification";
-import { DeterministicParser } from "@deterministic-code/generators-common/specification-parser";
+import { DATASOURCE_TYPES_YAML } from "@deterministic-code/deterministic-specifications-typescript/parser";
+import { DeterministicParser } from "@deterministic-code/deterministic-specifications-typescript/parser";
 import { createCasing, type PackCasing } from "./default-casing.ts";
 import { byFieldsFromDatasource } from "./datasource-by-fields.ts";
 import type { SqlDialect } from "./sql-dialect.ts";

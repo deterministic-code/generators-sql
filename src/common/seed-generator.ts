@@ -4,7 +4,7 @@ import type {
   DatasourceField,
   SeedRow,
   SeedValue,
-} from "@deterministic-code/generators-common/specification";
+} from "@deterministic-code/deterministic-specifications-typescript/parser";
 import { sqlStringLiteral } from "../base-type-converter.ts";
 import { insertSeedTmpl } from "../resources/sql.ts";
 import { renderSeedAfter, renderSeedBefore } from "./render-ddl.ts";

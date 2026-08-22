@@ -4,11 +4,11 @@ import type {
   DatasourceIndex,
   DatasourceType,
   SeedRow,
-} from "@deterministic-code/generators-common/specification";
+} from "@deterministic-code/deterministic-specifications-typescript/parser";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { DeterministicParser } from "@deterministic-code/generators-common/specification-parser";
-import { DATASOURCE_TYPES_YAML } from "@deterministic-code/generators-common/specification";
+import { DeterministicParser } from "@deterministic-code/deterministic-specifications-typescript/parser";
+import { DATASOURCE_TYPES_YAML } from "@deterministic-code/deterministic-specifications-typescript/parser";
 import { createCasing, type PackCasing } from "./default-casing.ts";
 import {
   buildLiveTables,
