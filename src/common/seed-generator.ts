@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type {
-  DatasourceField,
   SeedRow,
   SeedValue,
+  TypeField,
 } from "@deterministic-code/deterministic-specifications-typescript/parser";
+import { isPkField } from "@deterministic-code/generators-common/spec-types";
 import { sqlStringLiteral } from "../base-type-converter.ts";
 import { insertSeedTmpl } from "../resources/sql.ts";
 import { renderSeedAfter, renderSeedBefore } from "./render-ddl.ts";
@@ -15,12 +16,13 @@ import {
   type SqlDialect,
 } from "./sql-dialect.ts";
 import type { PackCasing } from "./default-casing.ts";
-import type { LiveTable } from "./sql-schema.ts";
+import { overlayOf, type LiveTable } from "./sql-schema.ts";
 
 const SEED_UUID_NAMESPACE = "9b3a8e6c-2f1d-4a5b-8c9d-1e2f3a4b5c6d";
 
 const pkType = (table: LiveTable): string =>
-  table.fields.find((f) => f.isPrimaryKey === true)?.type ?? "integer";
+  table.fields.find((f) => isPkField(f, table, overlayOf(table)))?.type ??
+  "integer";
 
 const seedUuid = (tableName: string, id: number): string => {
   const bytes = Buffer.from(
@@ -42,7 +44,7 @@ const seedUuid = (tableName: string, id: number): string => {
 
 const renderValue = (
   dialect: SqlDialect,
-  field: DatasourceField,
+  field: TypeField,
   value: SeedValue,
 ): string => {
   if (field.type === "boolean") {
@@ -65,7 +67,7 @@ const idValue = (table: LiveTable, id: number): string => {
 
 const colValue = (
   dialect: SqlDialect,
-  field: DatasourceField | undefined,
+  field: TypeField | undefined,
   value: SeedValue | undefined,
 ): string => {
   if (!field) return "NULL";

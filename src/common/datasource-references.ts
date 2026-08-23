@@ -37,14 +37,28 @@ const explicitPk = (parentDef: EntityDef): [string, FieldDef] | undefined => {
   return entry ? named(entry) : undefined;
 };
 
+const referenceParts = (
+  references: unknown,
+): [string, string] | null => {
+  if (Array.isArray(references) && references.length >= 1) {
+    const table = references[0];
+    const col = references[1];
+    if (typeof table !== "string" || table === "") return null;
+    return [table, typeof col === "string" && col !== "" ? col : "id"];
+  }
+  const parts = String(references).split(".");
+  if (parts.length !== 2 || parts[0] === "" || parts[1] === "") return null;
+  return [parts[0], parts[1]];
+};
+
 /** `{ type, size }` a `references: <entity>.<col>` FK inherits from the parent PK. */
 export const resolveReferenceParentType = (
   references: unknown,
   types: unknown,
   idType: string,
 ): ReferenceParentType | null => {
-  const parts = String(references).split(".");
-  if (parts.length !== 2 || parts[0] === "" || parts[1] === "") return null;
+  const parts = referenceParts(references);
+  if (!parts) return null;
   if (!Array.isArray(types)) return null;
   const parentDef = findEntityDef(types, parts[0]);
   if (!parentDef) return null;

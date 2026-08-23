@@ -6,13 +6,19 @@ import { generate as generateStoredProcedures } from "./generate-stored-procedur
 
 const TYPES_YAML = `types:
   - user:
+      tags: [datasource_type]
+      inherits: set
       fields:
         - email:
             type: string
+        - created:
+            type: datetime
+        - updated:
+            type: datetime
 `;
 
 const ctx = (settings: Record<string, string>) => ({
-  reader: memoryReader({ "datasource_types.yaml": TYPES_YAML }),
+  reader: memoryReader({ "types.yaml": TYPES_YAML }),
   settings,
 });
 
