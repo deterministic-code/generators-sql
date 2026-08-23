@@ -3,8 +3,8 @@ import { describe, it } from "node:test";
 import { memoryReader } from "@deterministic-code/generators-common/deterministic-reader";
 import {
   DATASOURCE_SEEDS_YAML,
-  DATASOURCE_TYPES_YAML,
-} from "@deterministic-code/deterministic-specifications-typescript/parser";
+  TYPES_YAML,
+} from "@deterministic-code/generators-common/spec-types";
 import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { generate } from "./generate-sql.ts";
 
@@ -16,16 +16,30 @@ const PLURALIZE: readonly Pluralize[] = ["on", "off"];
 
 const FIXTURE_YAML = `types:
   - user:
+      tags: [datasource_type]
+      inherits: set
       fields:
         - email:
             type: string
+        - created:
+            type: datetime
+        - updated:
+            type: datetime
   - notification_type:
+      tags: [datasource_type]
+      inherits: set
       fields:
         - channel_name:
             type: string
         - user_id:
             type: integer
             references: user.id
+        - created:
+            type: datetime
+            default_value: UtcNow
+        - updated:
+            type: datetime
+            default_value: UtcNow
 `;
 
 const SEEDS_YAML = `seeds:
@@ -36,7 +50,7 @@ const SEEDS_YAML = `seeds:
 
 const fixtureReader = (withSeeds = false) =>
   memoryReader({
-    [DATASOURCE_TYPES_YAML]: FIXTURE_YAML,
+    [TYPES_YAML]: FIXTURE_YAML,
     ...(withSeeds ? { [DATASOURCE_SEEDS_YAML]: SEEDS_YAML } : {}),
   });
 

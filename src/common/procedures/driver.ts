@@ -22,6 +22,7 @@ export type ProcTable = {
   name: string;
   entityName: string;
   fields: ProcField[];
+  pkName?: string;
 };
 
 export type Param = {

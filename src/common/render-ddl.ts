@@ -6,7 +6,8 @@ import { dialectConverter, q, type SqlDialect } from "./sql-dialect.ts";
 type TriggerTable = {
   name: string;
   tableName: string;
-  fields: { name: string; isPrimaryKey?: boolean }[];
+  pkName?: string;
+  fields: { name: string }[];
 };
 
 const triggerTokens = (
@@ -14,12 +15,12 @@ const triggerTokens = (
   table: TriggerTable,
   casing: PackCasing,
 ) => {
-  const pk = table.fields.find((f) => f.isPrimaryKey === true);
+  const pk = table.pkName ?? "id";
   return {
     quotedTable: q(dialect, table.tableName),
     quotedTrigger: q(dialect, casing.triggerName(table.name)),
     quotedUpdated: q(dialect, casing.columnName("updated")),
-    quotedPk: q(dialect, casing.columnName(pk ? pk.name : "id")),
+    quotedPk: q(dialect, casing.columnName(pk)),
     quotedId: q(dialect, casing.columnName("id")),
     utcNow: dialectConverter(dialect).conversions.datetime.defaults.UtcNow(""),
   };

@@ -4,23 +4,22 @@ interface ProcField {
   name: string;
   type: string;
   size?: number;
-  isPrimaryKey?: boolean;
 }
 
 interface ProcTable {
   fields: ProcField[];
+  pkName?: string;
 }
 
-/** The entity's primary key: an explicit `primary_key: true` field, else `id`. */
-export function pkFieldOf(table: ProcTable): ProcField {
-  return (
-    table.fields.find((f) => f.isPrimaryKey === true) ??
-    table.fields.find((f) => f.name === "id") ?? { name: "id", type: "integer" }
-  );
-}
+/** The entity's primary key: `pkName` when set, else a field named `id`. */
+export const pkFieldOf = (table: ProcTable): ProcField =>
+  (table.pkName
+    ? table.fields.find((f) => f.name === table.pkName)
+    : undefined) ??
+  table.fields.find((f) => f.name === "id") ?? { name: "id", type: "integer" };
 
 /** The writable, non-audit columns: everything but the pk, the system `uuid`, and `created`/`updated`. */
-export function writableNonAuditFields(table: ProcTable): ProcField[] {
+export const writableNonAuditFields = (table: ProcTable): ProcField[] => {
   const pk = pkFieldOf(table);
   return table.fields.filter(
     (f) =>
@@ -29,7 +28,7 @@ export function writableNonAuditFields(table: ProcTable): ProcField[] {
       f.name !== "created" &&
       f.name !== "updated",
   );
-}
+};
 
 /** CREATE IN-params from expanded columns, in the stored-procedure call order: `uuid` (if present), writable fields, `created`, `updated`. */
 export const createParamFields = (table: ProcTable): ProcField[] => {
@@ -62,10 +61,8 @@ export const aliasedColumns = (
 ): string =>
   table.fields.map((f) => `${alias}.${columnName(f.name)}`).join(", ");
 
-export function paramAlignWidth(params: { name: string }[]): number {
-  return params.reduce((m, p) => Math.max(m, p.name.length), 0);
-}
+export const paramAlignWidth = (params: { name: string }[]): number =>
+  params.reduce((m, p) => Math.max(m, p.name.length), 0);
 
-export function pad(s: string, w: number): string {
-  return s + " ".repeat(Math.max(0, w - s.length));
-}
+export const pad = (s: string, w: number): string =>
+  s + " ".repeat(Math.max(0, w - s.length));

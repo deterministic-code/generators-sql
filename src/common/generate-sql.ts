@@ -1,20 +1,24 @@
 import { fill } from "@deterministic-code/generators-common/fill";
 import type {
-  DatasourceField,
   DatasourceIndex,
-  DatasourceType,
   SeedRow,
+  TypeField,
 } from "@deterministic-code/deterministic-specifications-typescript/parser";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { DeterministicParser } from "@deterministic-code/deterministic-specifications-typescript/parser";
-import { DATASOURCE_TYPES_YAML } from "@deterministic-code/deterministic-specifications-typescript/parser";
+import { isPkField, pkName } from "@deterministic-code/generators-common/spec-types";
 import { createCasing, type PackCasing } from "./default-casing.ts";
 import {
   buildLiveTables,
+  fieldOverlay,
   hasAuditColumns,
+  overlayOf,
+  referenceTarget,
+  sqlTablesFrom,
   type LiveTable,
   type SqlFile,
+  type SqlTable,
 } from "./sql-schema.ts";
 import {
   dialectConverter,
@@ -76,16 +80,17 @@ const quotedConstraint = (
 const columnDef = (
   dialect: SqlDialect,
   casing: PackCasing,
-  entity: string,
-  field: DatasourceField,
+  table: SqlTable,
+  field: TypeField,
 ): string => {
+  const entity = table.name;
   let defaultExpr = sqlDefault(dialect, field);
   if (defaultExpr === null && field.name === "uuid") {
     defaultExpr =
       dialectConverter(dialect).conversions.uuid.defaults.NewId("") ?? null;
   }
   if (defaultExpr === "") defaultExpr = null;
-  const pk = field.isPrimaryKey === true;
+  const pk = isPkField(field, table, overlayOf(table));
   const hasDefault = defaultExpr !== null;
   return columnLine({
     quotedName: q(dialect, casing.columnName(field.name)),
@@ -132,9 +137,9 @@ const foreignKey = (
   dialect: SqlDialect,
   casing: PackCasing,
   entity: string,
-  field: DatasourceField,
+  field: TypeField,
 ): string => {
-  const [refTable, refCol] = String(field.references).split(".");
+  const [refTable, refCol] = referenceTarget(field.references!);
   return fill(foreignKeyTmpl, {
     quotedFkName: quotedConstraint(
       dialect,
@@ -155,7 +160,7 @@ const tableColumnLines = (
   casing: PackCasing,
 ): string[] => {
   const entity = table.name;
-  const pkName = quotedConstraint(dialect, casing, entity, "primary_key");
+  const quotedPkName = quotedConstraint(dialect, casing, entity, "primary_key");
   const utcNow =
     dialectConverter(dialect).conversions.datetime.defaults.UtcNow("");
 
@@ -181,13 +186,14 @@ const tableColumnLines = (
     });
   };
 
+  const overlay = overlayOf(table);
   const lines: string[] = [];
   const extras: string[] = [];
   for (const f of table.fields) {
-    if (f.name === "id" && f.isPrimaryKey === true) {
+    if (f.name === "id" && isPkField(f, table, overlay)) {
       const idLine = fill(dialectSql[dialect].idColumn, {
         quotedName: q(dialect, casing.columnName("id")),
-        quotedPkName: pkName,
+        quotedPkName,
         quotedDefaultName: quotedConstraint(
           dialect,
           casing,
@@ -223,8 +229,8 @@ const tableColumnLines = (
       lines.push(timestampLine(f));
       continue;
     }
-    lines.push(columnDef(dialect, casing, entity, f));
-    if (f.isUnique === true) {
+    lines.push(columnDef(dialect, casing, table, f));
+    if (fieldOverlay(table, f.name)?.isUnique === true) {
       extras.push(uniqueConstraint(dialect, casing, entity, f.name));
     }
     if (f.references) {
@@ -274,14 +280,18 @@ const flattenTable = (
     createTable: createTableSql(dialect, table, casing),
     indexesBlock: indexes.join("\n"),
     trigger: hasAuditColumns(table)
-      ? renderUpdatedTrigger(dialect, table, casing)
+      ? renderUpdatedTrigger(
+          dialect,
+          { ...table, pkName: pkName(table, overlayOf(table)) },
+          casing,
+        )
       : "",
   };
 };
 
 const generateInitialMigration = (
   language: string,
-  types: DatasourceType[],
+  types: SqlTable[],
   seedsByTable: Map<string, SeedRow[]>,
   casing: PackCasing,
 ): { up: SqlFile; down: SqlFile } => {
@@ -342,13 +352,12 @@ const customEntries = async (
 const loadSchema = async (
   ctx: GenerateContext,
 ): Promise<{
-  types: DatasourceType[];
+  types: SqlTable[];
   seeds: Map<string, SeedRow[]>;
 }> => {
-  await ctx.reader.read(DATASOURCE_TYPES_YAML);
   const spec = await DeterministicParser(ctx.reader).parse(ctx.settings);
   return {
-    types: spec.expandedDatasourceTypes,
+    types: sqlTablesFrom(spec),
     seeds: spec.datasourceSeeds,
   };
 };

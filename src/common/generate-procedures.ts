@@ -1,8 +1,8 @@
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { DATASOURCE_TYPES_YAML } from "@deterministic-code/deterministic-specifications-typescript/parser";
 import { DeterministicParser } from "@deterministic-code/deterministic-specifications-typescript/parser";
+import { pkName } from "@deterministic-code/generators-common/spec-types";
 import { createCasing, type PackCasing } from "./default-casing.ts";
 import { byFieldsFromDatasource } from "./datasource-by-fields.ts";
 import type { SqlDialect } from "./sql-dialect.ts";
@@ -10,6 +10,8 @@ import {
   buildLiveTables,
   datasourceSettings,
   hasAuditColumns,
+  overlayOf,
+  sqlTablesFrom,
 } from "./sql-schema.ts";
 import {
   generateProceduresFor,
@@ -60,9 +62,8 @@ export const generateProceduresForDialect = async (
   const ds = datasourceSettings(ctx.settings);
   if (!pack || !ds.useStoredProcedures) return [];
 
-  await ctx.reader.read(DATASOURCE_TYPES_YAML);
-  const types = (await DeterministicParser(ctx.reader).parse(ctx.settings))
-    .expandedDatasourceTypes;
+  const spec = await DeterministicParser(ctx.reader).parse(ctx.settings);
+  const types = sqlTablesFrom(spec);
   const casing = createCasing(ctx.settings);
   const tables = buildLiveTables(types, casing).filter(hasAuditColumns);
   if (tables.length === 0) return [];
@@ -75,6 +76,7 @@ export const generateProceduresForDialect = async (
       name: t.tableName,
       entityName: t.name,
       fields: t.fields,
+      pkName: pkName(t, overlayOf(t)),
     };
     return {
       body: [
