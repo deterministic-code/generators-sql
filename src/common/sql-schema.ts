@@ -8,6 +8,7 @@ import type {
 } from "@deterministic-code/deterministic-specifications-typescript/parser";
 import {
   datasourceTypesOf,
+  pkName,
   tableByName,
 } from "@deterministic-code/generators-common/spec-types";
 
@@ -56,18 +57,13 @@ const GENERATED_ID_TYPES = new Set([
   "string",
 ]);
 
-const identityColumns = (
-  type: Pick<Type, "inherits" | "fields" | "ids">,
-): string[] => {
-  if (type.ids !== undefined && type.ids.length > 0) return [...type.ids];
-  const marked = type.fields.filter((f) => f.isId === true).map((f) => f.name);
-  if (marked.length > 0) return marked;
-  if (type.inherits === "set") return ["id"];
+export const tableIdentity = (table: SqlTable): string[] => {
+  const col = pkName(table, overlayOf(table));
+  if (table.fields.some((f) => f.name === col) || table.inherits === "set") {
+    return [col];
+  }
   return [];
 };
-
-export const tableIdentity = (table: SqlTable): string[] =>
-  identityColumns(table);
 
 export const isGeneratedIdentity = (table: SqlTable): boolean => {
   const keys = tableIdentity(table);

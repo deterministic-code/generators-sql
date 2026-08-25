@@ -78,13 +78,11 @@ const identityYaml = `types:
       fields:
         - code:
             type: integer
-            is_id: true
         - email:
             type: string
   - link:
       tags: [datasource_type]
       inherits: set
-      ids: [left_id, right_id]
       fields:
         - left_id:
             type: integer
@@ -94,9 +92,6 @@ const identityYaml = `types:
       tags: [datasource_type]
       inherits: set
       fields:
-        - id:
-            type: integer
-            is_id: true
         - name:
             type: string
 `;
@@ -133,22 +128,24 @@ const upBody = async (
 };
 
 describe("generate-sql identity keys", () => {
-  it("maps is_id to a generated primary key and does not inject id", async () => {
+  it("uses the injected set id as a generated primary key", async () => {
     const sql = await upBody();
     assert.match(sql, /CREATE TABLE "people"/);
-    assert.match(sql, /"code" SERIAL CONSTRAINT "people_primary_key" PRIMARY KEY/);
+    assert.match(sql, /"id" SERIAL CONSTRAINT "people_primary_key" PRIMARY KEY/);
+    assert.match(sql, /"code" INTEGER NOT NULL/);
     assert.match(sql, /"email"/);
-    assert.doesNotMatch(sql, /CREATE TABLE "people"[\s\S]*"id" SERIAL/);
   });
 
-  it("maps ids to a composite primary key", async () => {
+  it("does not treat authored columns as a composite primary key", async () => {
     const sql = await upBody();
     assert.match(sql, /CREATE TABLE "links"/);
-    assert.match(
+    assert.match(sql, /"id" SERIAL CONSTRAINT "links_primary_key" PRIMARY KEY/);
+    assert.match(sql, /"left_id" INTEGER NOT NULL/);
+    assert.match(sql, /"right_id" INTEGER NOT NULL/);
+    assert.doesNotMatch(
       sql,
       /CONSTRAINT "links_primary_key" PRIMARY KEY \("left_id", "right_id"\)/,
     );
-    assert.doesNotMatch(sql, /CREATE TABLE "links"[\s\S]*"id" SERIAL/);
   });
 
   it("emits a plain primary key when is_fixed_id is set", async () => {
