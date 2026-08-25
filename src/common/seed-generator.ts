@@ -15,8 +15,13 @@ import {
   sqlDefault,
   type SqlDialect,
 } from "./sql-dialect.ts";
-import type { PackCasing } from "./default-casing.ts";
-import { overlayOf, type LiveTable } from "./sql-schema.ts";
+import type { SqlMapping } from "./sql-mapping.ts";
+import {
+  isGeneratedIdentity,
+  overlayOf,
+  tableIdentity,
+  type LiveTable,
+} from "./sql-schema.ts";
 
 const SEED_UUID_NAMESPACE = "9b3a8e6c-2f1d-4a5b-8c9d-1e2f3a4b5c6d";
 
@@ -82,10 +87,11 @@ const colsForRow = (
   row: Record<string, SeedValue>,
 ): string[] => {
   const names = new Set(table.fields.map((f) => f.name));
+  const generated = isGeneratedIdentity(table) ? tableIdentity(table) : [];
   return [
-    ...(names.has("id") ? ["id"] : []),
-    ...(names.has("uuid") ? ["uuid"] : []),
-    ...Object.keys(row).filter((k) => k !== "id" && k !== "uuid"),
+    ...generated.filter((k) => names.has(k)),
+    ...(names.has("uuid") && !generated.includes("uuid") ? ["uuid"] : []),
+    ...Object.keys(row).filter((k) => !generated.includes(k) && k !== "uuid"),
   ];
 };
 
@@ -93,11 +99,12 @@ const insert = (
   dialect: SqlDialect,
   table: LiveTable,
   seed: SeedRow,
-  casing: PackCasing,
+  mapping: SqlMapping,
 ): string => {
   const cols = colsForRow(table, seed.row);
+  const generated = isGeneratedIdentity(table) ? tableIdentity(table) : [];
   const values = cols.map((c) => {
-    if (c === "id") return idValue(table, seed.id);
+    if (generated.includes(c)) return idValue(table, seed.id);
     if (c === "uuid") return sqlStringLiteral(seedUuid(table.name, seed.id));
     return colValue(
       dialect,
@@ -107,7 +114,7 @@ const insert = (
   });
   return fill(insertSeedTmpl, {
     quotedTable: q(dialect, table.tableName),
-    colList: cols.map((c) => q(dialect, casing.columnName(c))).join(", "),
+    colList: cols.map((c) => q(dialect, mapping.columnName(table, c))).join(", "),
     valueList: values.join(", "),
   }).trimEnd();
 };
@@ -117,7 +124,7 @@ export const seedSections = (
   dialect: SqlDialect,
   tables: LiveTable[],
   seeds: Map<string, SeedRow[]>,
-  casing: PackCasing,
+  mapping: SqlMapping,
 ): string[] => {
   const lines: string[] = [];
   for (const table of tables) {
@@ -125,8 +132,10 @@ export const seedSections = (
     if (rows.length === 0) continue;
     const quoted = q(dialect, table.tableName);
     const t = pkType(table);
-    const sequenced = t !== "uuid" && t !== "string";
-    const idColumn = casing.columnName("id");
+    const keys = tableIdentity(table);
+    const sequenced =
+      isGeneratedIdentity(table) && t !== "uuid" && t !== "string";
+    const idColumn = mapping.columnName(table, keys[0] ?? "id");
     const before = sequenced ? renderSeedBefore(dialect, quoted) : "";
     const after = sequenced
       ? renderSeedAfter(
@@ -141,7 +150,7 @@ export const seedSections = (
       `-- Seeds: ${table.tableName}`,
       [
         ...(before ? [before] : []),
-        ...rows.map((s) => insert(dialect, table, s, casing)),
+        ...rows.map((s) => insert(dialect, table, s, mapping)),
         ...(after ? [after] : []),
       ].join("\n"),
       "",

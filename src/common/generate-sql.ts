@@ -9,13 +9,15 @@ import { content, type GenerateEntry } from "@deterministic-code/generators-comm
 import { DeterministicParser } from "@deterministic-code/deterministic-specifications-typescript/parser";
 import { isPkField, pkName } from "@deterministic-code/generators-common/spec-types";
 import { createCasing, type PackCasing } from "./default-casing.ts";
+import { SqlMapping } from "./sql-mapping.ts";
 import {
   buildLiveTables,
   fieldOverlay,
   hasAuditColumns,
   overlayOf,
-  referenceTarget,
   sqlTablesFrom,
+  tableIdentity,
+  usesGeneratedIdColumn,
   type LiveTable,
   type SqlFile,
   type SqlTable,
@@ -38,6 +40,7 @@ import {
   dialectSql,
   foreignKeyTmpl,
   uniqueConstraintTmpl,
+  primaryKeyConstraintTmpl,
   migrationDownTmpl,
   migrationUpTmpl,
 } from "../resources/sql.ts";
@@ -72,33 +75,33 @@ const columnLine = (tokens: ColumnTokens): string =>
 
 const quotedConstraint = (
   dialect: SqlDialect,
-  casing: PackCasing,
-  entity: string,
+  mapping: SqlMapping,
+  table: SqlTable,
   ...parts: string[]
-): string => q(dialect, casing.constraintName(entity, ...parts));
+): string => q(dialect, mapping.constraintName(table, ...parts));
 
 const columnDef = (
   dialect: SqlDialect,
-  casing: PackCasing,
+  mapping: SqlMapping,
   table: SqlTable,
   field: TypeField,
 ): string => {
-  const entity = table.name;
   let defaultExpr = sqlDefault(dialect, field);
   if (defaultExpr === null && field.name === "uuid") {
     defaultExpr =
       dialectConverter(dialect).conversions.uuid.defaults.NewId("") ?? null;
   }
   if (defaultExpr === "") defaultExpr = null;
-  const pk = isPkField(field, table, overlayOf(table));
+  const keys = tableIdentity(table);
+  const pk = keys.length === 1 && isPkField(field, table, overlayOf(table));
   const hasDefault = defaultExpr !== null;
   return columnLine({
-    quotedName: q(dialect, casing.columnName(field.name)),
+    quotedName: q(dialect, mapping.columnName(table, field.name)),
     nativeType: mapColumnType(dialect, field),
-    notNull: !field.isNullable,
+    notNull: !field.isNullable || keys.includes(field.name),
     primaryKey: pk,
     quotedPkName: pk
-      ? quotedConstraint(dialect, casing, entity, "primary_key")
+      ? quotedConstraint(dialect, mapping, table, "primary_key")
       : undefined,
     hasDefault,
     namedDefault: hasDefault && supportsNamedDefault(dialect),
@@ -106,9 +109,9 @@ const columnDef = (
       hasDefault && supportsNamedDefault(dialect)
         ? quotedConstraint(
             dialect,
-            casing,
-            entity,
-            field.name,
+            mapping,
+            table,
+            mapping.fieldStem(table, field.name),
             "default_constraint",
           )
         : undefined,
@@ -118,56 +121,68 @@ const columnDef = (
 
 const uniqueConstraint = (
   dialect: SqlDialect,
-  casing: PackCasing,
-  entity: string,
+  mapping: SqlMapping,
+  table: SqlTable,
   column: string,
 ): string =>
   fill(uniqueConstraintTmpl, {
     quotedUniqueName: quotedConstraint(
       dialect,
-      casing,
-      entity,
-      column,
+      mapping,
+      table,
+      mapping.fieldStem(table, column),
       "unique_constraint",
     ),
-    quotedName: q(dialect, casing.columnName(column)),
+    quotedName: q(dialect, mapping.columnName(table, column)),
+  }).trimEnd();
+
+const compositePrimaryKey = (
+  dialect: SqlDialect,
+  mapping: SqlMapping,
+  table: SqlTable,
+  keys: string[],
+): string =>
+  fill(primaryKeyConstraintTmpl, {
+    quotedPkName: quotedConstraint(dialect, mapping, table, "primary_key"),
+    quotedCols: keys
+      .map((c) => q(dialect, mapping.columnName(table, c)))
+      .join(", "),
   }).trimEnd();
 
 const foreignKey = (
   dialect: SqlDialect,
-  casing: PackCasing,
-  entity: string,
+  mapping: SqlMapping,
+  table: SqlTable,
   field: TypeField,
 ): string => {
-  const [refTable, refCol] = referenceTarget(field.references!);
+  const ref = mapping.resolveReference(field.references!);
   return fill(foreignKeyTmpl, {
     quotedFkName: quotedConstraint(
       dialect,
-      casing,
-      entity,
-      field.name,
+      mapping,
+      table,
+      mapping.fieldStem(table, field.name),
       "foreign_key",
     ),
-    quotedName: q(dialect, casing.columnName(field.name)),
-    quotedRefTable: q(dialect, casing.tableName(refTable)),
-    quotedRefCol: q(dialect, casing.columnName(refCol)),
+    quotedName: q(dialect, mapping.columnName(table, field.name)),
+    quotedRefTable: q(dialect, ref.tableName),
+    quotedRefCol: q(dialect, ref.columnName),
   }).trimEnd();
 };
 
 const tableColumnLines = (
   dialect: SqlDialect,
   table: LiveTable,
-  casing: PackCasing,
+  mapping: SqlMapping,
 ): string[] => {
-  const entity = table.name;
-  const quotedPkName = quotedConstraint(dialect, casing, entity, "primary_key");
+  const quotedPkName = quotedConstraint(dialect, mapping, table, "primary_key");
   const utcNow =
     dialectConverter(dialect).conversions.datetime.defaults.UtcNow("");
 
   const timestampLine = (field: { name: string; type: string }): string => {
     const hasDefault = utcNow !== null;
     return columnLine({
-      quotedName: q(dialect, casing.columnName(field.name)),
+      quotedName: q(dialect, mapping.columnName(table, field.name)),
       nativeType: mapColumnType(dialect, { type: field.type }),
       notNull: true,
       hasDefault,
@@ -176,9 +191,9 @@ const tableColumnLines = (
         hasDefault && supportsNamedDefault(dialect)
           ? quotedConstraint(
               dialect,
-              casing,
-              entity,
-              field.name,
+              mapping,
+              table,
+              mapping.fieldStem(table, field.name),
               "default_constraint",
             )
           : undefined,
@@ -186,19 +201,22 @@ const tableColumnLines = (
     });
   };
 
-  const overlay = overlayOf(table);
+  const keys = tableIdentity(table);
   const lines: string[] = [];
   const extras: string[] = [];
+  if (keys.length > 1) {
+    extras.push(compositePrimaryKey(dialect, mapping, table, keys));
+  }
   for (const f of table.fields) {
-    if (f.name === "id" && isPkField(f, table, overlay)) {
+    if (usesGeneratedIdColumn(table, f)) {
       const idLine = fill(dialectSql[dialect].idColumn, {
-        quotedName: q(dialect, casing.columnName("id")),
+        quotedName: q(dialect, mapping.columnName(table, f.name)),
         quotedPkName,
         quotedDefaultName: quotedConstraint(
           dialect,
-          casing,
-          entity,
-          "id",
+          mapping,
+          table,
+          mapping.fieldStem(table, f.name),
           "default_constraint",
         ),
         integer: f.type === "integer",
@@ -212,29 +230,29 @@ const tableColumnLines = (
     if (f.name === "uuid") {
       lines.push(
         fill(dialectSql[dialect].uuidColumn, {
-          quotedName: q(dialect, casing.columnName("uuid")),
+          quotedName: q(dialect, mapping.columnName(table, "uuid")),
           quotedDefaultName: quotedConstraint(
             dialect,
-            casing,
-            entity,
-            "uuid",
+            mapping,
+            table,
+            mapping.fieldStem(table, "uuid"),
             "default_constraint",
           ),
         }).trimEnd(),
       );
-      extras.push(uniqueConstraint(dialect, casing, entity, "uuid"));
+      extras.push(uniqueConstraint(dialect, mapping, table, "uuid"));
       continue;
     }
     if (f.name === "created" || f.name === "updated") {
       lines.push(timestampLine(f));
       continue;
     }
-    lines.push(columnDef(dialect, casing, table, f));
+    lines.push(columnDef(dialect, mapping, table, f));
     if (fieldOverlay(table, f.name)?.isUnique === true) {
-      extras.push(uniqueConstraint(dialect, casing, entity, f.name));
+      extras.push(uniqueConstraint(dialect, mapping, table, f.name));
     }
     if (f.references) {
-      extras.push(foreignKey(dialect, casing, entity, f));
+      extras.push(foreignKey(dialect, mapping, table, f));
     }
   }
   return [...lines, ...extras];
@@ -243,9 +261,9 @@ const tableColumnLines = (
 const createTableSql = (
   dialect: SqlDialect,
   table: LiveTable,
-  casing: PackCasing,
+  mapping: SqlMapping,
 ): string => {
-  const lines = tableColumnLines(dialect, table, casing);
+  const lines = tableColumnLines(dialect, table, mapping);
   return fill(createTableTmpl, {
     quotedName: q(dialect, table.tableName),
     columns: lines.map((line, i) => ({
@@ -257,33 +275,35 @@ const createTableSql = (
 
 const createIndexSql = (
   dialect: SqlDialect,
-  casing: PackCasing,
+  mapping: SqlMapping,
   table: LiveTable,
   idx: DatasourceIndex,
 ): string =>
   fill(createIndexTmpl, {
     isUnique: idx.isUnique,
-    quotedName: quotedConstraint(dialect, casing, table.name, idx.name, "index"),
+    quotedName: quotedConstraint(dialect, mapping, table, idx.name, "index"),
     quotedTable: q(dialect, table.tableName),
-    quotedCols: idx.fields.map((c) => q(dialect, casing.columnName(c))).join(", "),
+    quotedCols: idx.fields
+      .map((c) => q(dialect, mapping.columnName(table, c)))
+      .join(", "),
   }).trimEnd();
 
 const flattenTable = (
   dialect: SqlDialect,
   table: LiveTable,
-  casing: PackCasing,
+  mapping: SqlMapping,
 ) => {
   const indexes = table.indexes.map((idx) =>
-    createIndexSql(dialect, casing, table, idx),
+    createIndexSql(dialect, mapping, table, idx),
   );
   return {
-    createTable: createTableSql(dialect, table, casing),
+    createTable: createTableSql(dialect, table, mapping),
     indexesBlock: indexes.join("\n"),
     trigger: hasAuditColumns(table)
       ? renderUpdatedTrigger(
           dialect,
           { ...table, pkName: pkName(table, overlayOf(table)) },
-          casing,
+          mapping,
         )
       : "",
   };
@@ -296,9 +316,10 @@ const generateInitialMigration = (
   casing: PackCasing,
 ): { up: SqlFile; down: SqlFile } => {
   const dialect = requireDialect(language);
-  const live = buildLiveTables(types, casing);
+  const mapping = new SqlMapping(casing, types);
+  const live = buildLiveTables(types, mapping);
   const preamble = renderPreamble(dialect);
-  const seeds = seedSections(dialect, live, seedsByTable, casing);
+  const seeds = seedSections(dialect, live, seedsByTable, mapping);
 
   return {
     up: {
@@ -307,7 +328,7 @@ const generateInitialMigration = (
         fill(migrationUpTmpl, {
           dialect,
           preamble: preamble ? `${preamble}\n` : "",
-          tables: live.map((t) => flattenTable(dialect, t, casing)),
+          tables: live.map((t) => flattenTable(dialect, t, mapping)),
           hasSeeds: seeds.length > 0,
           seedBlocks: seeds,
         }),

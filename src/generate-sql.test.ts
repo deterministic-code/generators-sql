@@ -71,6 +71,97 @@ describe("generate-sql datasource.use_stored_procedures", () => {
   });
 });
 
+const identityYaml = `types:
+  - person:
+      tags: [datasource_type]
+      inherits: set
+      fields:
+        - code:
+            type: integer
+            is_id: true
+        - email:
+            type: string
+  - link:
+      tags: [datasource_type]
+      inherits: set
+      ids: [left_id, right_id]
+      fields:
+        - left_id:
+            type: integer
+        - right_id:
+            type: integer
+  - country:
+      tags: [datasource_type]
+      inherits: set
+      fields:
+        - id:
+            type: integer
+            is_id: true
+        - name:
+            type: string
+`;
+
+const identityDatasource = `includes:
+  - types:
+      filter: tag == "datasource_type"
+types:
+  - country:
+      fields:
+        - id:
+            is_fixed_id: true
+            is_readonly: true
+`;
+
+const identityCtx = {
+  reader: memoryReader({
+    "types.yaml": identityYaml,
+    "datasource.yaml": identityDatasource,
+  }),
+  settings: { "backend.datasources": "postgres" },
+};
+
+const upBody = async (
+  settings: Record<string, string> = { "backend.datasources": "postgres" },
+) => {
+  const files = await generateSql({
+    reader: identityCtx.reader,
+    settings,
+  });
+  const up = files.find((e) => e.filename.endsWith("0001_initial_up.sql"));
+  assert.ok(up, "expected initial up migration");
+  return "contents" in up ? String(up.contents) : up.content;
+};
+
+describe("generate-sql identity keys", () => {
+  it("maps is_id to a generated primary key and does not inject id", async () => {
+    const sql = await upBody();
+    assert.match(sql, /CREATE TABLE "people"/);
+    assert.match(sql, /"code" SERIAL CONSTRAINT "people_primary_key" PRIMARY KEY/);
+    assert.match(sql, /"email"/);
+    assert.doesNotMatch(sql, /CREATE TABLE "people"[\s\S]*"id" SERIAL/);
+  });
+
+  it("maps ids to a composite primary key", async () => {
+    const sql = await upBody();
+    assert.match(sql, /CREATE TABLE "links"/);
+    assert.match(
+      sql,
+      /CONSTRAINT "links_primary_key" PRIMARY KEY \("left_id", "right_id"\)/,
+    );
+    assert.doesNotMatch(sql, /CREATE TABLE "links"[\s\S]*"id" SERIAL/);
+  });
+
+  it("emits a plain primary key when is_fixed_id is set", async () => {
+    const sql = await upBody();
+    assert.match(sql, /CREATE TABLE "countries"/);
+    assert.match(
+      sql,
+      /"id" INTEGER NOT NULL CONSTRAINT "countries_primary_key" PRIMARY KEY/,
+    );
+    assert.doesNotMatch(sql, /CREATE TABLE "countries"[\s\S]*"id" SERIAL/);
+  });
+});
+
 describe("generate-stored-procedures datasource.use_stored_procedures", () => {
   it("emits procedure migrations when the flag is true", async () => {
     const files = names(await generateStoredProcedures(ctx(postgresOn)));

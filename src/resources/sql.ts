@@ -40,6 +40,7 @@ export const [
   columnTmpl,
   foreignKeyTmpl,
   uniqueConstraintTmpl,
+  primaryKeyConstraintTmpl,
   migrationUpTmpl,
   migrationDownTmpl,
   dialectSql,
@@ -50,6 +51,7 @@ export const [
   resource("column.sql.tmpl"),
   resource("foreign-key.sql.tmpl"),
   resource("unique-constraint.sql.tmpl"),
+  resource("primary-key-constraint.sql.tmpl"),
   resource("migration-up.sql.tmpl"),
   resource("migration-down.sql.tmpl"),
   Promise.all(
