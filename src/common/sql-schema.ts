@@ -10,7 +10,6 @@ import {
   datasourceTypesOf,
   tableByName,
 } from "@deterministic-code/generators-common/spec-types";
-import type { PackCasing } from "./default-casing.ts";
 
 /** Flattened `datasource.*` flags. On unless `"false"`; stored procedures are opt-in `"true"`. */
 export const datasourceSettings = (settings: Record<string, string>) => ({
@@ -49,6 +48,40 @@ export const fieldOverlay = (
   fieldName: string,
 ): DatasourceFieldOverlay | undefined =>
   table.overlays.find((overlay) => overlay.name === fieldName);
+
+const GENERATED_ID_TYPES = new Set([
+  "integer",
+  "biginteger",
+  "uuid",
+  "string",
+]);
+
+const identityColumns = (
+  type: Pick<Type, "inherits" | "fields" | "ids">,
+): string[] => {
+  if (type.ids !== undefined && type.ids.length > 0) return [...type.ids];
+  const marked = type.fields.filter((f) => f.isId === true).map((f) => f.name);
+  if (marked.length > 0) return marked;
+  if (type.inherits === "set") return ["id"];
+  return [];
+};
+
+export const tableIdentity = (table: SqlTable): string[] =>
+  identityColumns(table);
+
+export const isGeneratedIdentity = (table: SqlTable): boolean => {
+  const keys = tableIdentity(table);
+  if (keys.length !== 1) return false;
+  return fieldOverlay(table, keys[0]!)?.isFixedId !== true;
+};
+
+export const usesGeneratedIdColumn = (
+  table: SqlTable,
+  field: TypeField,
+): boolean =>
+  isGeneratedIdentity(table) &&
+  field.name === tableIdentity(table)[0] &&
+  GENERATED_ID_TYPES.has(field.type);
 
 export const sqlTablesFrom = (spec: IDeterministic): SqlTable[] => {
   const overlays = tableByName(spec);
@@ -127,11 +160,11 @@ const topoSort = (tables: LiveTable[]): LiveTable[] => {
 /** Attach physical names and order parent tables before children. */
 export const buildLiveTables = (
   types: SqlTable[],
-  casing: PackCasing,
+  mapping: { tableName: (table: SqlTable) => string },
 ): LiveTable[] =>
   topoSort(
     types.map((t) => ({
       ...t,
-      tableName: casing.tableName(t.name),
+      tableName: mapping.tableName(t),
     })),
   );

@@ -32,22 +32,22 @@ const generateCreate = ({
   table,
   tableTok,
   pk,
-  casing,
+  columnName,
 }: RenderCtx): string => {
   const paramFields = createParamFields(table);
   const generatedId = pk.type === "uuid";
   const insertFields = generatedId ? table.fields : paramFields;
-  const cols = insertFields.map((f) => casing.columnName(f.name));
+  const cols = insertFields.map((f) => columnName(f.name));
   const vals = generatedId
     ? insertFields.map((f) =>
-        f.name === pk.name ? "new_id" : casing.columnName(f.name),
+        f.name === pk.name ? "new_id" : columnName(f.name),
       )
     : cols;
   return fill(createTmpl, {
     routineName,
     params: renderParams(
       paramFields.map((f) => ({
-        name: casing.columnName(f.name),
+        name: columnName(f.name),
         type: paramType(f),
       })),
     ),
@@ -56,8 +56,8 @@ const generateCreate = ({
     tableTok,
     cols: cols.join(", "),
     vals: vals.join(", "),
-    pkName: casing.columnName(pk.name),
-    uuidCol: casing.columnName("uuid"),
+    pkName: columnName(pk.name),
+    uuidCol: columnName("uuid"),
   }).trimEnd();
 };
 
@@ -66,14 +66,14 @@ const generateFindOne = ({
   table,
   tableTok,
   pk,
-  casing,
+  columnName,
 }: RenderCtx): string =>
   fill(findOneTmpl, {
     routineName,
-    pkName: casing.columnName(pk.name),
+    pkName: columnName(pk.name),
     pkType: paramType(pk),
     tableTok,
-    aliasedCols: aliasedColumns(table, "t", casing.columnName),
+    aliasedCols: aliasedColumns(table, "t", columnName),
   }).trimEnd();
 
 const generateFindAll = ({
@@ -81,25 +81,25 @@ const generateFindAll = ({
   table,
   tableTok,
   pk,
-  casing,
+  columnName,
 }: RenderCtx): string =>
   fill(findAllTmpl, {
     routineName,
     tableTok,
-    aliasedCols: aliasedColumns(table, "t", casing.columnName),
-    pkName: casing.columnName(pk.name),
+    aliasedCols: aliasedColumns(table, "t", columnName),
+    pkName: columnName(pk.name),
   }).trimEnd();
 
 const generateFindBy = (
-  { routineName, table, tableTok, casing }: RenderCtx,
+  { routineName, table, tableTok, columnName }: RenderCtx,
   field: ProcField,
 ): string =>
   fill(findByTmpl, {
     routineName,
-    byField: casing.columnName(field.name),
+    byField: columnName(field.name),
     fieldType: paramType(field),
     tableTok,
-    aliasedCols: aliasedColumns(table, "t", casing.columnName),
+    aliasedCols: aliasedColumns(table, "t", columnName),
   }).trimEnd();
 
 const updateDialect: UpdateProcDialect = {
@@ -121,26 +121,26 @@ const generateDelete = ({
   routineName,
   tableTok,
   pk,
-  casing,
+  columnName,
 }: RenderCtx): string =>
   fill(deleteTmpl, {
     routineName,
-    pkName: casing.columnName(pk.name),
+    pkName: columnName(pk.name),
     pkType: paramType(pk),
     tableTok,
   }).trimEnd();
 
 const generateDeleteOcc = (
-  { routineName, tableTok, pk, casing }: RenderCtx,
+  { routineName, tableTok, pk, columnName }: RenderCtx,
   params: Param[],
 ): string =>
   fill(deleteOccTmpl, {
     routineName,
     params: renderParams(params),
     tableTok,
-    pkName: casing.columnName(pk.name),
-    updatedCol: casing.columnName("updated"),
-    expectedUpdated: casing.columnName("expected_updated"),
+    pkName: columnName(pk.name),
+    updatedCol: columnName("updated"),
+    expectedUpdated: columnName("expected_updated"),
   }).trimEnd();
 
 export const dialect: Dialect = {

@@ -58,6 +58,7 @@ export type RenderCtx = {
   tableTok: string;
   pk: ProcField;
   casing: PackCasing;
+  columnName: (logical: string) => string;
   routineName: string;
 };
 
@@ -144,7 +145,7 @@ const updateSpec = (
   table: ProcTable,
   variant: Variant,
   name: string,
-  casing: PackCasing,
+  columnName: (logical: string) => string,
 ): UpdateSpec => {
   const { occ = false, byField } = variant;
   const key = byField ? requireField(table, byField, name) : pkFieldOf(table);
@@ -152,7 +153,7 @@ const updateSpec = (
   const writable = writableNonAuditFields(table).filter(
     (f) => f.name !== byField,
   );
-  const col = (field: string): string => casing.columnName(field);
+  const col = (field: string): string => columnName(field);
   return {
     writable,
     name,
@@ -195,17 +196,17 @@ const renderOp = (dialect: Dialect, spec: ProcSpec, ctx: RenderCtx): string => {
       return dialect.generateUpdate(
         ctx,
         variant,
-        updateSpec(dialect, ctx.table, variant, spec.name, ctx.casing),
+        updateSpec(dialect, ctx.table, variant, spec.name, ctx.columnName),
       );
     }
     case "delete":
       return dialect.generateDelete(ctx);
     case "deleteOcc": {
-      const { pk, table, casing } = ctx;
+      const { pk, table, columnName } = ctx;
       return dialect.generateDeleteOcc(ctx, [
-        { name: casing.columnName(pk.name), type: dialect.paramType(pk) },
+        { name: columnName(pk.name), type: dialect.paramType(pk) },
         {
-          name: casing.columnName("expected_updated"),
+          name: columnName("expected_updated"),
           type: dialect.paramType(updatedFieldOf(table)),
         },
       ]);
@@ -219,6 +220,7 @@ export const generateProceduresFor = (
   byFields: string[],
   occ: boolean,
   casing: PackCasing,
+  columnName: (logical: string) => string,
 ): string[] => {
   const base: Omit<RenderCtx, "routineName"> = {
     entityName: table.entityName,
@@ -226,6 +228,7 @@ export const generateProceduresFor = (
     tableTok: q(dialect.dialectName, table.name),
     pk: pkFieldOf(table),
     casing,
+    columnName,
   };
   return procedureSpecs(table.entityName, byFields, occ, casing).map((spec) =>
     renderOp(dialect, spec, { ...base, routineName: spec.name }),
@@ -256,7 +259,7 @@ export type UpdateProcDialect = {
 export const makeGenerateUpdate =
   (d: UpdateProcDialect) =>
   (ctx: RenderCtx, variant: Variant, spec: UpdateSpec): string => {
-    const col = (field: string): string => ctx.casing.columnName(field);
+    const col = (field: string): string => ctx.columnName(field);
     const argOf = (field: string) => d.argRef(col(field), spec.name);
     const pk = ctx.pk.name;
     const where = variant.byField

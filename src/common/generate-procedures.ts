@@ -5,6 +5,7 @@ import { DeterministicParser } from "@deterministic-code/deterministic-specifica
 import { pkName } from "@deterministic-code/generators-common/spec-types";
 import { createCasing, type PackCasing } from "./default-casing.ts";
 import { byFieldsFromDatasource } from "./datasource-by-fields.ts";
+import { SqlMapping } from "./sql-mapping.ts";
 import type { SqlDialect } from "./sql-dialect.ts";
 import {
   buildLiveTables,
@@ -65,7 +66,8 @@ export const generateProceduresForDialect = async (
   const spec = await DeterministicParser(ctx.reader).parse(ctx.settings);
   const types = sqlTablesFrom(spec);
   const casing = createCasing(ctx.settings);
-  const tables = buildLiveTables(types, casing).filter(hasAuditColumns);
+  const mapping = new SqlMapping(casing, types);
+  const tables = buildLiveTables(types, mapping).filter(hasAuditColumns);
   if (tables.length === 0) return [];
 
   const occ = ds.useOptimisticConcurrency;
@@ -81,7 +83,9 @@ export const generateProceduresForDialect = async (
     return {
       body: [
         `-- ${t.name}`,
-        ...generateProceduresFor(pack.dialect, table, fields, occ, casing),
+        ...generateProceduresFor(pack.dialect, table, fields, occ, casing, (logical) =>
+          mapping.columnName(t, logical),
+        ),
       ].join("\n\n"),
       drops: procedureSpecs(t.name, fields, occ, casing).map((spec) =>
         fill(dropRoutineTmpl, { verb: pack.verb, name: spec.name }).trimEnd(),

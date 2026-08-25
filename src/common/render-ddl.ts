@@ -1,27 +1,23 @@
 import { fill } from "@deterministic-code/generators-common/fill";
 import { dialectSql } from "../resources/sql.ts";
-import type { PackCasing } from "./default-casing.ts";
+import type { SqlMapping } from "./sql-mapping.ts";
+import type { SqlTable } from "./sql-schema.ts";
 import { dialectConverter, q, type SqlDialect } from "./sql-dialect.ts";
 
-type TriggerTable = {
-  name: string;
-  tableName: string;
-  pkName?: string;
-  fields: { name: string }[];
-};
+type TriggerTable = SqlTable & { tableName: string; pkName?: string };
 
 const triggerTokens = (
   dialect: SqlDialect,
   table: TriggerTable,
-  casing: PackCasing,
+  mapping: SqlMapping,
 ) => {
   const pk = table.pkName ?? "id";
   return {
     quotedTable: q(dialect, table.tableName),
-    quotedTrigger: q(dialect, casing.triggerName(table.name)),
-    quotedUpdated: q(dialect, casing.columnName("updated")),
-    quotedPk: q(dialect, casing.columnName(pk)),
-    quotedId: q(dialect, casing.columnName("id")),
+    quotedTrigger: q(dialect, mapping.triggerName(table)),
+    quotedUpdated: q(dialect, mapping.columnName(table, "updated")),
+    quotedPk: q(dialect, mapping.columnName(table, pk)),
+    quotedId: q(dialect, mapping.columnName(table, "id")),
     utcNow: dialectConverter(dialect).conversions.datetime.defaults.UtcNow(""),
   };
 };
@@ -37,11 +33,11 @@ export const renderDropTable = (
 export const renderUpdatedTrigger = (
   dialect: SqlDialect,
   table: TriggerTable,
-  casing: PackCasing,
+  mapping: SqlMapping,
 ): string =>
   fill(
     dialectSql[dialect].updatedTrigger,
-    triggerTokens(dialect, table, casing),
+    triggerTokens(dialect, table, mapping),
   ).trimEnd();
 
 export const renderPreamble = (dialect: SqlDialect): string => {
