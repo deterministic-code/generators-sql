@@ -83,6 +83,7 @@ const identityYaml = `types:
   - link:
       tags: [datasource_type]
       inherits: set
+      ids: [left_id, right_id]
       fields:
         - left_id:
             type: integer
@@ -136,16 +137,16 @@ describe("generate-sql identity keys", () => {
     assert.match(sql, /"email"/);
   });
 
-  it("does not treat authored columns as a composite primary key", async () => {
+  it("emits a composite primary key when ids lists multiple columns", async () => {
     const sql = await upBody();
     assert.match(sql, /CREATE TABLE "links"/);
-    assert.match(sql, /"id" SERIAL CONSTRAINT "links_primary_key" PRIMARY KEY/);
     assert.match(sql, /"left_id" INTEGER NOT NULL/);
     assert.match(sql, /"right_id" INTEGER NOT NULL/);
-    assert.doesNotMatch(
+    assert.match(
       sql,
       /CONSTRAINT "links_primary_key" PRIMARY KEY \("left_id", "right_id"\)/,
     );
+    assert.doesNotMatch(sql, /CREATE TABLE "links"[\s\S]*"id" SERIAL/);
   });
 
   it("emits a plain primary key when is_fixed_id is set", async () => {
