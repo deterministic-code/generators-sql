@@ -1,5 +1,7 @@
 import { fill } from "@deterministic-code/generators-common/fill";
 import { dialectSql } from "../resources/sql.ts";
+import type { ConverterField } from "../base-type-converter.ts";
+import { occBumpSql } from "./occ-sql.ts";
 import type { SqlMapping } from "./sql-mapping.ts";
 import type { SqlTable } from "./sql-schema.ts";
 import { dialectConverter, q, type SqlDialect } from "./sql-dialect.ts";
@@ -39,6 +41,33 @@ export const renderUpdatedTrigger = (
     dialectSql[dialect].updatedTrigger,
     triggerTokens(dialect, table, mapping),
   ).trimEnd();
+
+export const renderOccBumpTrigger = (
+  dialect: SqlDialect,
+  table: TriggerTable,
+  mapping: SqlMapping,
+  field: ConverterField,
+): string => {
+  const occCol = mapping.columnName(table, field.name ?? "");
+  const quotedOcc = q(dialect, occCol);
+  const oldRef =
+    dialect === "postgres" || dialect === "mysql"
+      ? `NEW.${quotedOcc}`
+      : dialect === "oracle"
+        ? `:NEW.${quotedOcc}`
+        : dialect === "sqlite"
+          ? `OLD.${quotedOcc}`
+          : `t.${quotedOcc}`;
+  const bump = occBumpSql(dialect, field, oldRef);
+  if (bump === null) return "";
+  return fill(dialectSql[dialect].occBumpTrigger, {
+    ...triggerTokens(dialect, table, mapping),
+    quotedTrigger: q(dialect, mapping.occTriggerName(table)),
+    quotedOcc,
+    quotedFunction: q(dialect, `${mapping.occTriggerName(table)}_fn`),
+    occBump: bump,
+  }).trimEnd();
+};
 
 export const renderPreamble = (dialect: SqlDialect): string => {
   const tmpl = dialectSql[dialect].preamble;

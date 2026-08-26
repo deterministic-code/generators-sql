@@ -9,6 +9,7 @@ interface ProcField {
 interface ProcTable {
   fields: ProcField[];
   pkName?: string;
+  occField?: string | { name: string };
 }
 
 /** The entity's primary key: `pkName` when set, else a field named `id`. */
@@ -21,12 +22,15 @@ export const pkFieldOf = (table: ProcTable): ProcField =>
 /** The writable, non-audit columns: everything but the pk, the system `uuid`, and `created`/`updated`. */
 export const writableNonAuditFields = (table: ProcTable): ProcField[] => {
   const pk = pkFieldOf(table);
+  const occName =
+    typeof table.occField === "string" ? table.occField : table.occField?.name;
   return table.fields.filter(
     (f) =>
       f.name !== pk.name &&
       f.name !== "uuid" &&
       f.name !== "created" &&
-      f.name !== "updated",
+      f.name !== "updated" &&
+      f.name !== occName,
   );
 };
 

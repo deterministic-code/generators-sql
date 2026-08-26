@@ -14,14 +14,12 @@ import {
   tableByName,
 } from "@deterministic-code/generators-common/spec-types";
 
-/** Flattened `datasource.*` flags. On unless `"false"`; stored procedures are opt-in `"true"`. */
+/** Flattened `datasource.*` flags. Stored procedures are opt-in `"true"`. */
 export const datasourceSettings = (settings: Record<string, string>) => ({
   pluralizeTableNames:
     String(settings["datasource.pluralize_datatable_names"]) !== "false",
   useStoredProcedures:
     String(settings["datasource.use_stored_procedures"]) === "true",
-  useOptimisticConcurrency:
-    String(settings["datasource.use_optimistic_concurrency"]) !== "false",
 });
 
 export type SqlTable = Omit<Type, "mapping"> & {
@@ -29,7 +27,6 @@ export type SqlTable = Omit<Type, "mapping"> & {
   indexes: DatasourceIndex[];
   uniqueIndexFields: string[];
   mapping?: string;
-  useOptimisticConcurrency?: boolean;
   overlays: DatasourceFieldOverlay[];
 };
 
@@ -41,9 +38,6 @@ export const overlayOf = (table: SqlTable): DatasourceTable => ({
   indexes: table.indexes,
   uniqueIndexFields: table.uniqueIndexFields,
   ...(table.mapping !== undefined ? { mapping: table.mapping } : {}),
-  ...(table.useOptimisticConcurrency !== undefined
-    ? { useOptimisticConcurrency: table.useOptimisticConcurrency }
-    : {}),
 });
 
 export const fieldOverlay = (
@@ -99,9 +93,6 @@ export const sqlTablesFrom = (spec: IDeterministic): SqlTable[] => {
       indexes: table?.indexes ?? [],
       uniqueIndexFields: table?.uniqueIndexFields ?? [],
       ...(table?.mapping !== undefined ? { mapping: table.mapping } : {}),
-      ...(table?.useOptimisticConcurrency !== undefined
-        ? { useOptimisticConcurrency: table.useOptimisticConcurrency }
-        : {}),
       overlays: table?.fields ?? [],
     };
   });
@@ -112,6 +103,18 @@ export const hasAuditColumns = (table: {
 }): boolean =>
   table.fields.some((f) => f.name === "created") &&
   table.fields.some((f) => f.name === "updated");
+
+export const occOverlayOf = (
+  table: SqlTable,
+): DatasourceFieldOverlay | undefined =>
+  table.overlays.find((overlay) => overlay.isOptimisticConcurrency === true);
+
+export const occFieldOf = (table: SqlTable): TypeField | undefined => {
+  const overlay = occOverlayOf(table);
+  return overlay
+    ? table.fields.find((field) => field.name === overlay.name)
+    : undefined;
+};
 
 export type SqlFile = { path: string; content: string };
 

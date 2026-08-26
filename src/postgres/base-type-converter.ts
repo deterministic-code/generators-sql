@@ -9,6 +9,7 @@ import {
   stringy,
   toNativeFrom,
   uuidDefaults,
+  isOccBinaryColumn,
   type ConverterField,
   type SqlConversion,
 } from "../base-type-converter.ts";
@@ -65,5 +66,6 @@ export const toColumnType = (field: ConverterField): string => {
     const ps = decimalPrecisionScale(field);
     return ps ? `NUMERIC(${ps[0]}, ${ps[1]})` : "NUMERIC";
   }
+  if (isOccBinaryColumn(field)) return "BYTEA";
   return toNative(field.type);
 };

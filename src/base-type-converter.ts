@@ -19,7 +19,20 @@ export type ConverterField = {
   referencesType?: string;
   referencesSize?: FieldSize;
   defaultValue?: string | boolean | number | null;
+  isOptimisticConcurrency?: boolean;
+  useNativeRowVersion?: boolean;
 };
+
+export const usesNativeRowVersion = (field: ConverterField): boolean =>
+  field.useNativeRowVersion === true && field.isOptimisticConcurrency === true;
+
+export const emitsNativeRowVersion = (
+  field: ConverterField,
+  dialect: string,
+): boolean => dialect === "sqlserver" && usesNativeRowVersion(field);
+
+export const isOccBinaryColumn = (field: ConverterField): boolean =>
+  field.type === "binary" && field.isOptimisticConcurrency === true;
 
 export const sqlStringLiteral = (
   value: string | number | boolean | null | undefined,

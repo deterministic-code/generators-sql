@@ -14,6 +14,8 @@ import {
   buildLiveTables,
   fieldOverlay,
   hasAuditColumns,
+  occFieldOf,
+  occOverlayOf,
   overlayOf,
   sqlTablesFrom,
   tableIdentity,
@@ -30,6 +32,8 @@ import {
   sqlDefault,
   type SqlDialect,
 } from "./sql-dialect.ts";
+import { emitsNativeRowVersion } from "../base-type-converter.ts";
+import { converterFieldOf, occZeroDefault } from "./occ-sql.ts";
 import { buildCustomMigrationFiles } from "./generate-custom-migrations.ts";
 import { generateProceduresForDialect } from "./generate-procedures.ts";
 import { seedSections } from "./seed-generator.ts";
@@ -46,6 +50,7 @@ import {
 } from "../resources/sql.ts";
 import {
   renderDropTable,
+  renderOccBumpTrigger,
   renderPreamble,
   renderUpdatedTrigger,
 } from "./render-ddl.ts";
@@ -86,10 +91,24 @@ const columnDef = (
   table: SqlTable,
   field: TypeField,
 ): string => {
-  let defaultExpr = sqlDefault(dialect, field);
+  const overlay = fieldOverlay(table, field.name);
+  const converterField = converterFieldOf(field, overlay);
+  let defaultExpr = sqlDefault(dialect, converterField);
   if (defaultExpr === null && field.name === "uuid") {
     defaultExpr =
       dialectConverter(dialect).conversions.uuid.defaults.NewId("") ?? null;
+  }
+  if (emitsNativeRowVersion(converterField, dialect)) defaultExpr = null;
+  else if (
+    converterField.isOptimisticConcurrency === true &&
+    field.type === "binary" &&
+    (defaultExpr === null ||
+      defaultExpr === "" ||
+      defaultExpr === "0x" ||
+      defaultExpr === "X''" ||
+      defaultExpr === `'\\x'`)
+  ) {
+    defaultExpr = occZeroDefault(dialect);
   }
   if (defaultExpr === "") defaultExpr = null;
   const keys = tableIdentity(table);
@@ -97,7 +116,7 @@ const columnDef = (
   const hasDefault = defaultExpr !== null;
   return columnLine({
     quotedName: q(dialect, mapping.columnName(table, field.name)),
-    nativeType: mapColumnType(dialect, field),
+    nativeType: mapColumnType(dialect, converterField),
     notNull: !field.isNullable || keys.includes(field.name),
     primaryKey: pk,
     quotedPkName: pk
@@ -296,16 +315,23 @@ const flattenTable = (
   const indexes = table.indexes.map((idx) =>
     createIndexSql(dialect, mapping, table, idx),
   );
+  const live = { ...table, pkName: pkName(table, overlayOf(table)) };
+  const audit = hasAuditColumns(table)
+    ? renderUpdatedTrigger(dialect, live, mapping)
+    : "";
+  const occField = occFieldOf(table);
+  const occOverlay = occOverlayOf(table);
+  const occConverter = occField
+    ? converterFieldOf(occField, occOverlay)
+    : undefined;
+  const occ =
+    occConverter && !emitsNativeRowVersion(occConverter, dialect)
+      ? renderOccBumpTrigger(dialect, live, mapping, occConverter)
+      : "";
   return {
     createTable: createTableSql(dialect, table, mapping),
     indexesBlock: indexes.join("\n"),
-    trigger: hasAuditColumns(table)
-      ? renderUpdatedTrigger(
-          dialect,
-          { ...table, pkName: pkName(table, overlayOf(table)) },
-          mapping,
-        )
-      : "",
+    trigger: [audit, occ].filter((part) => part !== "").join("\n\n"),
   };
 };
 

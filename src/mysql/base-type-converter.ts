@@ -9,6 +9,7 @@ import {
   stringy,
   toNativeFrom,
   uuidDefaults,
+  isOccBinaryColumn,
   type ConverterField,
   type SqlConversion,
 } from "../base-type-converter.ts";
@@ -77,6 +78,9 @@ export const toColumnType = (field: ConverterField): string => {
   if (field.type === "string") return stringCol(field);
   if (field.type === "character") return `CHAR(${charLen(field)})`;
   if (field.type === "decimal") return mysqlDecimal(field);
-  if (field.type === "binary") return binaryCol(field);
+  if (field.type === "binary") {
+    if (isOccBinaryColumn(field)) return "BINARY(8)";
+    return binaryCol(field);
+  }
   return toNative(field.type);
 };
