@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 import { memoryReader } from "@deterministic-code/generators-common/deterministic-reader";
 import {
   DATASOURCE_SEEDS_YAML,
-  DATASOURCE_YAML,
   TYPES_YAML,
 } from "@deterministic-code/generators-common/spec-types";
 import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
@@ -83,7 +82,7 @@ const upSql = async (settings: Record<string, string> = {}) => {
   const files = await generate({
     reader: memoryReader({
       [TYPES_YAML]: TYPES,
-      [DATASOURCE_YAML]: DATASOURCE,
+      "datasource.yaml": DATASOURCE,
       [DATASOURCE_SEEDS_YAML]: SEEDS,
     }),
     settings: { "backend.datasources": "postgres", ...settings },
