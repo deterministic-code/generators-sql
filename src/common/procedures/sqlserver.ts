@@ -122,7 +122,7 @@ const generateDelete = ({
   }).trimEnd();
 
 const generateDeleteOcc = (
-  { routineName, tableTok, pk, columnName }: RenderCtx,
+  { routineName, tableTok, pk, columnName, table }: RenderCtx,
   params: Param[],
 ): string =>
   fill(deleteOccTmpl, {
@@ -130,8 +130,12 @@ const generateDeleteOcc = (
     params: renderParams(params),
     tableTok,
     pkName: columnName(pk.name),
-    updatedCol: columnName("updated"),
-    expectedUpdated: columnName("expected_updated"),
+    occCol: table.occField
+      ? columnName(table.occField.name)
+      : columnName("updated"),
+    expectedOcc: table.occField
+      ? `expected_${columnName(table.occField.name)}`
+      : columnName("expected_updated"),
   }).trimEnd();
 
 export const dialect: Dialect = {

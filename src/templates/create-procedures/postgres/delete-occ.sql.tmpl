@@ -5,7 +5,7 @@ DECLARE
   affected INT;
 BEGIN
   DELETE FROM {{tableTok}} t
-  WHERE t.{{pkName}} = {{routineName}}.{{pkName}} AND t.{{updatedCol}} = {{routineName}}.{{expectedUpdated}};
+  WHERE t.{{pkName}} = {{routineName}}.{{pkName}} AND t.{{occCol}} = {{routineName}}.{{expectedOcc}};
   GET DIAGNOSTICS affected = ROW_COUNT;
   RETURN affected;
 END;

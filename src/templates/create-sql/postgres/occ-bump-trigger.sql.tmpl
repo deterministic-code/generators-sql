@@ -1,0 +1,7 @@
+CREATE OR REPLACE FUNCTION {{quotedFunction}}() RETURNS TRIGGER AS $$
+BEGIN
+  NEW.{{quotedOcc}} := {{{occBump}}};
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+CREATE TRIGGER {{quotedTrigger}} BEFORE UPDATE ON {{quotedTable}} FOR EACH ROW EXECUTE FUNCTION {{quotedFunction}}();

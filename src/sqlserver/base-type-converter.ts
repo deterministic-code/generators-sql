@@ -9,6 +9,8 @@ import {
   stringy,
   toNativeFrom,
   uuidDefaults,
+  isOccBinaryColumn,
+  usesNativeRowVersion,
   type ConverterField,
   type SqlConversion,
 } from "../base-type-converter.ts";
@@ -66,6 +68,10 @@ export const toColumnType = (field: ConverterField): string => {
     const [p, s] = requirePrecisionScale(field, "sqlserver");
     return `DECIMAL(${p}, ${s})`;
   }
-  if (field.type === "binary") return binaryCol(field);
+  if (field.type === "binary") {
+    if (usesNativeRowVersion(field)) return "ROWVERSION";
+    if (isOccBinaryColumn(field)) return "BINARY(8)";
+    return binaryCol(field);
+  }
   return toNative(field.type);
 };

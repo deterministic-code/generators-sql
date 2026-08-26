@@ -16,6 +16,7 @@ const optionalResource = async (rel: string): Promise<string> => {
 type DialectSqlTmpls = {
   dropTable: string;
   updatedTrigger: string;
+  occBumpTrigger: string;
   preamble: string;
   seedBefore: string;
   seedAfter: string;
@@ -26,6 +27,7 @@ type DialectSqlTmpls = {
 const loadDialect = async (dialect: SqlDialect): Promise<DialectSqlTmpls> => ({
   dropTable: await resource(`${dialect}/drop-table.sql.tmpl`),
   updatedTrigger: await resource(`${dialect}/updated-trigger.sql.tmpl`),
+  occBumpTrigger: await resource(`${dialect}/occ-bump-trigger.sql.tmpl`),
   preamble: await optionalResource(`${dialect}/preamble.sql.tmpl`),
   seedBefore: await optionalResource(`${dialect}/seed-before.sql.tmpl`),
   seedAfter: await optionalResource(`${dialect}/seed-after.sql.tmpl`),

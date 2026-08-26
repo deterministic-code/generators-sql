@@ -7,6 +7,7 @@ import {
   stringy,
   toNativeFrom,
   uuidDefaults,
+  isOccBinaryColumn,
   type ConverterField,
   type SqlConversion,
 } from "../base-type-converter.ts";
@@ -58,5 +59,6 @@ export const toNative = (specType: string): string =>
 
 export const toColumnType = (field: ConverterField): string => {
   if (field.type === "string") return stringCol(field);
+  if (isOccBinaryColumn(field)) return "BLOB";
   return toNative(field.type);
 };

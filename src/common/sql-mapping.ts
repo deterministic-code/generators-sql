@@ -56,6 +56,13 @@ export class SqlMapping {
     return this.casing.triggerName(this.tableStem(table));
   }
 
+  occTriggerName(table: SqlTable): string {
+    if (isVerbatimMapping(table.mapping)) {
+      return `trg_${table.mapping}_occ`;
+    }
+    return `trg_${this.casing.tableName(this.tableStem(table))}_occ`;
+  }
+
   tableOf(logicalName: string): SqlTable {
     const table = this.byLogicalName.get(logicalName);
     if (!table) {

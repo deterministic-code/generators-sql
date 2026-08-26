@@ -11,6 +11,8 @@ import {
   buildLiveTables,
   datasourceSettings,
   hasAuditColumns,
+  occFieldOf,
+  occOverlayOf,
   overlayOf,
   sqlTablesFrom,
 } from "./sql-schema.ts";
@@ -67,18 +69,41 @@ export const generateProceduresForDialect = async (
   const types = sqlTablesFrom(spec);
   const casing = createCasing(ctx.settings);
   const mapping = new SqlMapping(casing, types);
-  const tables = buildLiveTables(types, mapping).filter(hasAuditColumns);
+  const tables = buildLiveTables(types, mapping).filter(
+    (t) => hasAuditColumns(t) || occFieldOf(t) !== undefined,
+  );
   if (tables.length === 0) return [];
 
-  const occ = ds.useOptimisticConcurrency;
   const byFields = byFieldsFromDatasource(types);
   const parts = tables.map((t) => {
     const fields = byFields.get(t.name) ?? [];
+    const occField = occFieldOf(t);
+    const occOverlay = occOverlayOf(t);
+    const occ = occField !== undefined;
     const table = {
       name: t.tableName,
       entityName: t.name,
-      fields: t.fields,
+      fields: t.fields.map((f) => ({
+        name: f.name,
+        type: f.type,
+        ...(f.name === occField?.name
+          ? {
+              isOptimisticConcurrency: true,
+              useNativeRowVersion: occOverlay?.useNativeRowVersion,
+            }
+          : {}),
+      })),
       pkName: pkName(t, overlayOf(t)),
+      ...(occField
+        ? {
+            occField: {
+              name: occField.name,
+              type: occField.type,
+              isOptimisticConcurrency: true,
+              useNativeRowVersion: occOverlay?.useNativeRowVersion,
+            },
+          }
+        : {}),
     };
     return {
       body: [
