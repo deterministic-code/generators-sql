@@ -7,6 +7,7 @@ import type {
   TypeField,
 } from "@deterministic-code/deterministic-specifications-typescript/parser";
 import {
+  columnFields,
   datasourceTypesOf,
   pkName,
   tableByName,
@@ -86,6 +87,7 @@ export const sqlTablesFrom = (spec: IDeterministic): SqlTable[] => {
     const { mapping: _typeMapping, ...rest } = type;
     return {
       ...rest,
+      fields: columnFields(type.fields),
       indexes: table?.indexes ?? [],
       uniqueIndexFields: table?.uniqueIndexFields ?? [],
       ...(table?.mapping !== undefined ? { mapping: table.mapping } : {}),
