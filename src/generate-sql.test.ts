@@ -159,6 +159,47 @@ describe("generate-sql identity keys", () => {
   });
 });
 
+describe("generate-sql collection fields", () => {
+  it("omits view collections from table columns and keeps the child FK", async () => {
+    const files = await generateSql({
+      reader: memoryReader({
+        "types.yaml": `types:
+  - contact:
+      tags: [datasource_type, view_type]
+      inherits: set
+      fields:
+        - email:
+            type: string
+        - addresses:
+            type: address[]
+            references: address.contact_id
+  - address:
+      tags: [datasource_type, view_type]
+      inherits: set
+      fields:
+        - contact_id:
+            type: number
+            references: contact.id
+        - city:
+            type: string
+`,
+      }),
+      settings: { "backend.datasources": "sqlite" },
+    });
+    const up = files.find((e) => e.filename.endsWith("0001_initial_up.sql"));
+    assert.ok(up, "expected initial up migration");
+    const sql = "contents" in up ? String(up.contents) : up.content;
+    assert.match(sql, /CREATE TABLE "contacts"/);
+    assert.match(sql, /CREATE TABLE "addresses"/);
+    const contacts = sql.match(/CREATE TABLE "contacts" \(([\s\S]*?)\);/)?.[1];
+    assert.ok(contacts, "expected contacts table body");
+    assert.match(contacts, /"email"/);
+    assert.doesNotMatch(contacts, /"addresses"/);
+    assert.match(sql, /"contact_id"/);
+    assert.match(sql, /FOREIGN KEY \("contact_id"\) REFERENCES "contacts"/);
+  });
+});
+
 describe("generate-stored-procedures datasource.use_stored_procedures", () => {
   it("emits procedure migrations when the flag is true", async () => {
     const files = names(await generateStoredProcedures(ctx(postgresOn)));
