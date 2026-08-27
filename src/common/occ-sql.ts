@@ -31,8 +31,17 @@ const binaryBump: Record<SqlDialect, (oldRef: string) => string> = {
     `decode(lpad(to_hex((('x' || encode(COALESCE(${oldRef}, '\\x${ZERO8}'::bytea), 'hex'))::bit(64)::bigint + 1) & x'ffffffffffffffff'::bigint), 16, '0'), 'hex')`,
   mysql: (oldRef) =>
     `UNHEX(LPAD(HEX(CAST(CONV(HEX(COALESCE(${oldRef}, X'${ZERO8}')), 16, 10) AS UNSIGNED) + 1), 16, '0'))`,
-  sqlite: (oldRef) =>
-    `unhex(printf('%016x', (CAST('0x' || hex(COALESCE(${oldRef}, X'${ZERO8}')) AS INTEGER) + 1)))`,
+  sqlite: (oldRef) => {
+    const blob = `COALESCE(${oldRef}, X'${ZERO8}')`;
+    const asInt = [1, 2, 3, 4, 5, 6, 7, 8]
+      .map((i) => {
+        const byte = `unicode(substr(${blob}, ${i}, 1))`;
+        const shift = 8 * (8 - i);
+        return shift === 0 ? byte : `(${byte} << ${shift})`;
+      })
+      .join(" + ");
+    return `unhex(printf('%016x', (${asInt} + 1)))`;
+  },
   sqlserver: (oldRef) =>
     `CONVERT(BINARY(8), CONVERT(BIGINT, CONVERT(VARBINARY(8), ${oldRef})) + 1)`,
   oracle: (oldRef) =>

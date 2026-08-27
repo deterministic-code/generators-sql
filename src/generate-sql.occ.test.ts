@@ -62,6 +62,9 @@ describe("field-level OCC SQL", () => {
     assert.match(ddl, /BLOB/);
     assert.match(ddl, /X'0000000000000000'/);
     assert.match(ddl, /_occ/);
+    assert.match(ddl, /WHEN NEW\."version" IS OLD\."version"/);
+    assert.match(ddl, /unicode\(substr\(COALESCE\(OLD\."version", X'0000000000000000'\), 1, 1\)\)/);
+    assert.doesNotMatch(ddl, /CAST\('0x'/);
   });
 
   it("emits expected_version on postgres OCC procedures", async () => {
