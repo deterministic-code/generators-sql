@@ -1,6 +1,7 @@
 CREATE TRIGGER {{quotedTrigger}}
 AFTER UPDATE ON {{quotedTable}}
 FOR EACH ROW
+WHEN NEW.{{quotedOcc}} IS OLD.{{quotedOcc}}
 BEGIN
   UPDATE {{quotedTable}} SET {{quotedOcc}} = {{{occBump}}} WHERE {{quotedPk}} = OLD.{{quotedPk}};
 END;
