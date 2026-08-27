@@ -6,20 +6,16 @@ import {
   type SqlTable,
 } from "./sql-schema.ts";
 
-const SNAKE_STEM = /^[a-z_][a-z0-9_]*$/;
-
-export const isVerbatimMapping = (mapping?: string): mapping is string =>
-  mapping !== undefined && !SNAKE_STEM.test(mapping);
-
 /** Physical table/column names from datasource `mapping` overlays + pack casing. */
 export class SqlMapping {
-  private readonly casing: PackCasing;
-  private readonly byLogicalName: ReadonlyMap<string, SqlTable>;
-
-  constructor(casing: PackCasing, tables: readonly SqlTable[]) {
-    this.casing = casing;
+  constructor(
+    private readonly casing: PackCasing,
+    tables: readonly SqlTable[],
+  ) {
     this.byLogicalName = new Map(tables.map((t) => [t.name, t]));
   }
+
+  private readonly byLogicalName: ReadonlyMap<string, SqlTable>;
 
   tableStem(table: SqlTable): string {
     return table.mapping ?? table.name;
@@ -30,37 +26,23 @@ export class SqlMapping {
   }
 
   tableName(table: SqlTable): string {
-    return isVerbatimMapping(table.mapping)
-      ? table.mapping
-      : this.casing.tableName(this.tableStem(table));
+    return this.casing.tableName(this.tableStem(table));
   }
 
   columnName(table: SqlTable, fieldName: string): string {
-    const mapped = fieldOverlay(table, fieldName)?.mapping;
-    return isVerbatimMapping(mapped)
-      ? mapped
-      : this.casing.columnName(this.fieldStem(table, fieldName));
+    return this.casing.columnName(this.fieldStem(table, fieldName));
   }
 
   constraintName(table: SqlTable, ...parts: string[]): string {
-    if (isVerbatimMapping(table.mapping)) {
-      return [table.mapping, ...parts].join("_");
-    }
     return this.casing.constraintName(this.tableStem(table), ...parts);
   }
 
   triggerName(table: SqlTable): string {
-    if (isVerbatimMapping(table.mapping)) {
-      return `trg_${table.mapping}_updated_at`;
-    }
     return this.casing.triggerName(this.tableStem(table));
   }
 
   occTriggerName(table: SqlTable): string {
-    if (isVerbatimMapping(table.mapping)) {
-      return `trg_${table.mapping}_occ`;
-    }
-    return `trg_${this.casing.tableName(this.tableStem(table))}_occ`;
+    return this.casing.occTriggerName(this.tableStem(table));
   }
 
   tableOf(logicalName: string): SqlTable {

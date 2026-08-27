@@ -16,8 +16,6 @@ import {
 
 /** Flattened `datasource.*` flags. Stored procedures are opt-in `"true"`. */
 export const datasourceSettings = (settings: Record<string, string>) => ({
-  pluralizeTableNames:
-    String(settings["datasource.pluralize_datatable_names"]) !== "false",
   useStoredProcedures:
     String(settings["datasource.use_stored_procedures"]) === "true",
 });

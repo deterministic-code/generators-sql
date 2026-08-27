@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { TypeField } from "@deterministic-code/deterministic-specifications-typescript/parser";
+import { createDatasourceNaming } from "@deterministic-code/generators-common/datasource-naming";
 import { createCasing } from "./default-casing.ts";
-import { isVerbatimMapping, SqlMapping } from "./sql-mapping.ts";
+import { SqlMapping } from "./sql-mapping.ts";
 import type { SqlTable } from "./sql-schema.ts";
 
 const field = (name: string): TypeField => ({
@@ -61,16 +62,16 @@ const mappingOf = (settings: Record<string, string> = {}) =>
     notification,
   ]);
 
-describe("isVerbatimMapping", () => {
-  it("treats omitted and snake stems as cased", () => {
-    assert.equal(isVerbatimMapping(undefined), false);
-    assert.equal(isVerbatimMapping("user"), false);
-    assert.equal(isVerbatimMapping("email_address"), false);
+describe("isVerbatim", () => {
+  const naming = createDatasourceNaming({});
+  it("treats snake stems as cased", () => {
+    assert.equal(naming.isVerbatim("user"), false);
+    assert.equal(naming.isVerbatim("email_address"), false);
   });
 
   it("treats mixed-case mappings as verbatim", () => {
-    assert.equal(isVerbatimMapping("OldRvwsTbl"), true);
-    assert.equal(isVerbatimMapping("UsrProfiles"), true);
+    assert.equal(naming.isVerbatim("OldRvwsTbl"), true);
+    assert.equal(naming.isVerbatim("UsrProfiles"), true);
   });
 });
 

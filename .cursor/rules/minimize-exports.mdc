@@ -1,0 +1,21 @@
+---
+description: Export the smallest public surface so modules stay loosely coupled.
+alwaysApply: true
+---
+
+# Minimize exports
+
+Export only what another module must call. Keep helpers, indexes, walkers, and intermediate types module-private. Extra exports couple callers to internals and freeze refactors.
+
+```typescript
+// ❌
+export const lastTokenPluralize = ...
+export const isVerbatimMapping = ...
+export const settingsForStrategy = ...
+
+// ✅
+const lastTokenPluralize = ...
+export const createCasing = ...
+```
+
+Do not re-export a type that is only the function's parameter. One export per concern; grow a barrel only when a second module needs the name.
