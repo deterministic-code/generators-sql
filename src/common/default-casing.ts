@@ -2,44 +2,25 @@ import {
   createCasingStrategy,
   type ICasingStrategy,
 } from "@deterministic-code/generators-common/casing-strategy";
-import pluralize from "pluralize";
+import { createDatasourceNaming } from "@deterministic-code/generators-common/datasource-naming";
 import { applyKeywordCasing } from "./sql-keywords.ts";
 
 export const GENERATOR_LANGUAGE = "sql";
 
 const DATASOURCE_CASING = "datasource.casing";
-const LANGUAGE_SQL_CASING = "languages.sql.casing";
-const CASING_LEAVES = [
-  "file_names",
-  "types",
-  "fields",
-  "directories",
-] as const;
 const UPPER_LOWER = ["upper", "lower"] as const;
 type UpperLower = (typeof UPPER_LOWER)[number];
 type ObjectFormat = UpperLower | "preserve";
 
-/** Pluralize only the last `_`-token (`backend_type` → `backend_types`). */
-const lastTokenPluralize = (name: string): string =>
-  name ? name.replace(/[^_]+$/, (token) => pluralize(token)) : name;
-
-const settingsForStrategy = (
-  settings: Record<string, string>,
-): Record<string, string> => {
-  const out: Record<string, string> = {};
-  for (const leaf of CASING_LEAVES) {
-    const value = settings[`${DATASOURCE_CASING}.${leaf}`];
-    if (value !== undefined) out[`${LANGUAGE_SQL_CASING}.${leaf}`] = value;
-  }
-  return out;
-};
-
 export type PackCasing = ICasingStrategy & {
+  isVerbatim: (mapping: string) => boolean
   tableName: (entity: string) => string
+  /** Always-plural routine English (`find_contacts`); ignores the table flag. */
   pluralTableName: (entity: string) => string
   columnName: (field: string) => string
   constraintName: (entity: string, ...parts: string[]) => string
   triggerName: (entity: string) => string
+  occTriggerName: (entity: string) => string
   routineName: (stem: string) => string
   fileBase: (stem: string) => string
   filePath: (stem: string) => string
@@ -62,35 +43,25 @@ const parseUpperLower = (
   );
 };
 
-const letterCase = (
-  text: string,
-  format: UpperLower | "preserve",
-): string => {
-  if (format === "upper") return text.toUpperCase();
-  if (format === "lower") return text.toLowerCase();
-  return text;
-};
+const letterCase = (text: string, format: ObjectFormat): string =>
+  format === "upper"
+    ? text.toUpperCase()
+    : format === "lower"
+      ? text.toLowerCase()
+      : text;
 
-const strategyFromSettings = (
-  settings: Record<string, string>,
-): ICasingStrategy => {
-  try {
-    return createCasingStrategy(
-      GENERATOR_LANGUAGE,
-      settingsForStrategy(settings),
-    );
-  } catch (error) {
-    throw new Error(
-      (error as Error).message.replaceAll(LANGUAGE_SQL_CASING, DATASOURCE_CASING),
-    );
-  }
-};
-
-/** Datasource casing + last-token table pluralization. Generators call this. */
+/** Datasource naming + SQL-only keyword/object letter-case. */
 export const createCasing = (
   settings: Record<string, string>,
 ): PackCasing => {
-  const casing = strategyFromSettings(settings);
+  const naming = createDatasourceNaming(settings);
+  const alwaysPlural = createDatasourceNaming({
+    ...settings,
+    "datasource.pluralize_datatable_names": "true",
+  });
+  const casing = createCasingStrategy("sql", settings, {
+    prefix: DATASOURCE_CASING,
+  });
   const keywordFormat = parseUpperLower(
     settings[`${DATASOURCE_CASING}.keywords`],
     `${DATASOURCE_CASING}.keywords`,
@@ -100,39 +71,42 @@ export const createCasing = (
     settings[`${DATASOURCE_CASING}.objects`],
     `${DATASOURCE_CASING}.objects`,
     "preserve",
-  ) as ObjectFormat;
+  );
   const keyword = (text: string): string => letterCase(text, keywordFormat);
   const objectName = (text: string): string => letterCase(text, objectFormat);
-  const pluralizeTableNames =
-    String(settings["datasource.pluralize_datatable_names"]) !== "false";
-  const physicalStem = (entity: string): string =>
-    pluralizeTableNames ? lastTokenPluralize(entity) : entity;
-  const tableName = (entity: string): string =>
-    objectName(casing.convertTypes(physicalStem(entity)));
+  const objectIdent = (stem: string, converted: string): string =>
+    naming.isVerbatim(stem) ? converted : objectName(converted);
   const fileBase = (stem: string): string => casing.convertFileName(stem);
+  const trigger = (entity: string, suffix: string): string => {
+    const stem = naming.physicalStem(entity);
+    return naming.isVerbatim(entity)
+      ? `trg_${entity}_${suffix}`
+      : objectName(naming.tableName(`trg_${stem}_${suffix}`));
+  };
   return {
-    convertFileName: (text: string) => casing.convertFileName(text),
-    convertTypes: (text: string) => casing.convertTypes(text),
-    convertFields: (text: string) => casing.convertFields(text),
-    convertDirectories: (text: string) => casing.convertDirectories(text),
-    tableName,
-    pluralTableName: (entity: string) =>
-      objectName(casing.convertTypes(lastTokenPluralize(entity))),
-    columnName: (field: string) => casing.convertFields(field),
-    constraintName: (entity: string, ...parts: string[]) =>
-      objectName(
-        casing.convertTypes([physicalStem(entity), ...parts].join("_")),
-      ),
-    triggerName: (entity: string) =>
-      objectName(
-        casing.convertTypes(`trg_${physicalStem(entity)}_updated_at`),
-      ),
-    routineName: (stem: string) => objectName(casing.convertTypes(stem)),
+    convertFileName: (text) => casing.convertFileName(text),
+    convertTypes: (text) => casing.convertTypes(text),
+    convertFields: (text) => casing.convertFields(text),
+    convertDirectories: (text) => casing.convertDirectories(text),
+    isVerbatim: naming.isVerbatim,
+    tableName: (entity) => objectIdent(entity, naming.resolveTable(entity)),
+    pluralTableName: (entity) =>
+      objectIdent(entity, alwaysPlural.resolveTable(entity)),
+    columnName: (field) => naming.resolveColumn(field),
+    constraintName: (entity, ...parts) =>
+      naming.isVerbatim(entity)
+        ? [entity, ...parts].join("_")
+        : objectName(
+            naming.tableName([naming.physicalStem(entity), ...parts].join("_")),
+          ),
+    triggerName: (entity) => trigger(entity, "updated_at"),
+    occTriggerName: (entity) => trigger(entity, "occ"),
+    routineName: (stem) => objectIdent(stem, naming.tableName(stem)),
     fileBase,
-    filePath: (stem: string) => `${fileBase(stem)}.sql`,
-    directory: (entity: string) => casing.convertDirectories(entity),
+    filePath: (stem) => `${fileBase(stem)}.sql`,
+    directory: (entity) => casing.convertDirectories(entity),
     keyword,
-    applyKeywords: (sql: string) =>
+    applyKeywords: (sql) =>
       keywordFormat === "lower" ? applyKeywordCasing(sql, keyword) : sql,
   };
 };
