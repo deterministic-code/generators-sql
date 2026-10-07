@@ -199,6 +199,80 @@ describe("generate-sql collection fields", () => {
     assert.match(sql, /"contact_id"/);
     assert.match(sql, /FOREIGN KEY \("contact_id"\) REFERENCES "contacts"/);
   });
+
+  it("emits a dictionary table with unique owner and key, flattening object values", async () => {
+    const files = await generateSql({
+      reader: memoryReader({
+        "types.yaml": `types:
+  - contact:
+      tags: [datasource_type]
+      inherits: set
+      fields:
+        - email:
+            type: string
+  - locale_pref:
+      tags: [view_type]
+      fields:
+        - locale:
+            type: string
+        - timezone:
+            type: string
+  - contact_settings:
+      tags: [datasource_type]
+      inherits: dictionary
+      fields:
+        - contact_id:
+            type: integer
+            references: contact.id
+        - key:
+            type: string
+        - value:
+            type: string
+  - contact_prefs:
+      tags: [datasource_type]
+      inherits: dictionary
+      fields:
+        - contact_id:
+            type: integer
+            references: contact.id
+        - key:
+            type: string
+        - value:
+            type: locale_pref
+  - card_labels:
+      tags: [view_type]
+      inherits: dictionary
+      fields:
+        - key:
+            type: string
+        - value:
+            type: string
+`,
+      }),
+      settings: { "backend.datasources": "sqlite" },
+    });
+    const up = files.find((e) => e.filename.endsWith("0001_initial_up.sql"));
+    assert.ok(up, "expected initial up migration");
+    const sql = "contents" in up ? String(up.contents) : up.content;
+    assert.match(sql, /CREATE TABLE "contact_settings"/);
+    assert.match(sql, /CREATE TABLE "contact_prefs"/);
+    assert.doesNotMatch(sql, /CREATE TABLE "card_labels"/);
+    const settings = sql.match(
+      /CREATE TABLE "contact_settings" \(([\s\S]*?)\);/,
+    )?.[1];
+    assert.ok(settings, "expected contact_settings table body");
+    assert.match(settings, /"contact_id"/);
+    assert.match(settings, /"key"/);
+    assert.match(settings, /"value"/);
+    assert.doesNotMatch(settings, /^\s*"id"/m);
+    const prefs = sql.match(/CREATE TABLE "contact_prefs" \(([\s\S]*?)\);/)?.[1];
+    assert.ok(prefs, "expected contact_prefs table body");
+    assert.match(prefs, /"locale"/);
+    assert.match(prefs, /"timezone"/);
+    assert.doesNotMatch(prefs, /"value"/);
+    assert.match(sql, /CREATE UNIQUE INDEX .* ON "contact_settings"/);
+    assert.match(sql, /CREATE UNIQUE INDEX .* ON "contact_prefs"/);
+  });
 });
 
 describe("generate-stored-procedures datasource.use_stored_procedures", () => {

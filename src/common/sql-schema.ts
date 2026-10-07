@@ -7,9 +7,10 @@ import type {
   TypeField,
 } from "@deterministic-code/deterministic-specifications-typescript/parser";
 import {
-  columnFields,
   datasourceTypesOf,
+  dictionaryUniqueColumns,
   identityColumns,
+  persistedColumnFields,
   pkName,
   tableByName,
 } from "@deterministic-code/generators-common/spec-types";
@@ -82,13 +83,31 @@ export const usesGeneratedIdColumn = (
 
 export const sqlTablesFrom = (spec: IDeterministic): SqlTable[] => {
   const overlays = tableByName(spec);
+  const byName = new Map(spec.expandedTypes.map((t) => [t.name, t]));
   return datasourceTypesOf(spec).map((type) => {
     const table = overlays.get(type.name);
     const { mapping: _typeMapping, ...rest } = type;
+    const uniqueCols = dictionaryUniqueColumns(type, byName);
+    const indexes = [...(table?.indexes ?? [])];
+    if (
+      uniqueCols.length > 0 &&
+      !indexes.some(
+        (idx) =>
+          idx.isUnique &&
+          idx.fields.length === uniqueCols.length &&
+          idx.fields.every((name, i) => name === uniqueCols[i]),
+      )
+    ) {
+      indexes.push({
+        name: "owner_key",
+        fields: uniqueCols,
+        isUnique: true,
+      });
+    }
     return {
       ...rest,
-      fields: columnFields(type.fields),
-      indexes: table?.indexes ?? [],
+      fields: persistedColumnFields(type, byName),
+      indexes,
       uniqueIndexFields: table?.uniqueIndexFields ?? [],
       ...(table?.mapping !== undefined ? { mapping: table.mapping } : {}),
       overlays: table?.fields ?? [],
