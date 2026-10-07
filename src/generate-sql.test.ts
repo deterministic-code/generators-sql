@@ -210,7 +210,7 @@ describe("generate-sql collection fields", () => {
       fields:
         - email:
             type: string
-  - locale_pref:
+  - locale_preferences:
       tags: [view_type]
       fields:
         - locale:
@@ -228,7 +228,7 @@ describe("generate-sql collection fields", () => {
             type: string
         - value:
             type: string
-  - contact_prefs:
+  - contact_preferences:
       tags: [datasource_type]
       inherits: dictionary
       fields:
@@ -238,7 +238,7 @@ describe("generate-sql collection fields", () => {
         - key:
             type: string
         - value:
-            type: locale_pref
+            type: locale_preferences
   - card_labels:
       tags: [view_type]
       inherits: dictionary
@@ -255,7 +255,7 @@ describe("generate-sql collection fields", () => {
     assert.ok(up, "expected initial up migration");
     const sql = "contents" in up ? String(up.contents) : up.content;
     assert.match(sql, /CREATE TABLE "contact_settings"/);
-    assert.match(sql, /CREATE TABLE "contact_prefs"/);
+    assert.match(sql, /CREATE TABLE "contact_preferences"/);
     assert.doesNotMatch(sql, /CREATE TABLE "card_labels"/);
     const settings = sql.match(
       /CREATE TABLE "contact_settings" \(([\s\S]*?)\);/,
@@ -265,13 +265,13 @@ describe("generate-sql collection fields", () => {
     assert.match(settings, /"key"/);
     assert.match(settings, /"value"/);
     assert.doesNotMatch(settings, /^\s*"id"/m);
-    const prefs = sql.match(/CREATE TABLE "contact_prefs" \(([\s\S]*?)\);/)?.[1];
-    assert.ok(prefs, "expected contact_prefs table body");
+    const prefs = sql.match(/CREATE TABLE "contact_preferences" \(([\s\S]*?)\);/)?.[1];
+    assert.ok(prefs, "expected contact_preferences table body");
     assert.match(prefs, /"locale"/);
     assert.match(prefs, /"timezone"/);
     assert.doesNotMatch(prefs, /"value"/);
     assert.match(sql, /CREATE UNIQUE INDEX .* ON "contact_settings"/);
-    assert.match(sql, /CREATE UNIQUE INDEX .* ON "contact_prefs"/);
+    assert.match(sql, /CREATE UNIQUE INDEX .* ON "contact_preferences"/);
   });
 });
 
