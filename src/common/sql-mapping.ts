@@ -8,14 +8,13 @@ import {
 
 /** Physical table/column names from datasource `mapping` overlays + pack casing. */
 export class SqlMapping {
-  constructor(
-    private readonly casing: PackCasing,
-    tables: readonly SqlTable[],
-  ) {
+  private readonly casing: PackCasing;
+  private readonly byLogicalName: ReadonlyMap<string, SqlTable>;
+
+  constructor(casing: PackCasing, tables: readonly SqlTable[]) {
+    this.casing = casing;
     this.byLogicalName = new Map(tables.map((t) => [t.name, t]));
   }
-
-  private readonly byLogicalName: ReadonlyMap<string, SqlTable>;
 
   tableStem(table: SqlTable): string {
     return table.mapping ?? table.name;
